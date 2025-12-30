@@ -252,28 +252,29 @@ class TestGetSessionId:
 class TestGetSessionName:
     """Tests for get_session_name."""
 
-    def test_extracts_project_name(self):
-        """Test extraction of project name from path.
-
-        Note: Project names with dashes get split since dashes are used as
-        path separators in the encoding. This gives us the last component.
-        """
+    def test_extracts_project_name_with_dashes(self):
+        """Test extraction of project name that contains dashes."""
         path = Path("/home/user/.claude/projects/-Users-tijs-projects-claude-code-live/abc123.jsonl")
-        # "claude-code-live" gets decoded as /claude/code/live, so we get "live"
-        assert get_session_name(path) == "live"
+        # Should preserve dashes in project name
+        assert get_session_name(path) == "claude-code-live"
 
     def test_handles_simple_path(self):
         """Test with simple project path."""
-        path = Path("/home/user/.claude/projects/-Users-tijs-myproject/session.jsonl")
+        path = Path("/home/user/.claude/projects/-Users-tijs-projects-myproject/session.jsonl")
         assert get_session_name(path) == "myproject"
 
-    def test_handles_nested_path(self):
-        """Test with deeply nested project path."""
+    def test_handles_tmp_path(self):
+        """Test with tmp directory path."""
+        path = Path("/home/user/.claude/projects/-Users-tijs-tmp-llm-council/session.jsonl")
+        assert get_session_name(path) == "llm-council"
+
+    def test_handles_nested_code_path(self):
+        """Test with code directory path."""
         path = Path("/home/user/.claude/projects/-home-user-code-python-webapp/session.jsonl")
-        assert get_session_name(path) == "webapp"
+        assert get_session_name(path) == "python-webapp"
 
     def test_fallback_to_folder_name(self):
-        """Test fallback when decoding produces empty name."""
+        """Test fallback when no markers found."""
         path = Path("/tmp/some-folder/session.jsonl")
         # Should handle gracefully
         result = get_session_name(path)

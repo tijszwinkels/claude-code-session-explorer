@@ -17,30 +17,33 @@ def get_session_name(session_path: Path) -> str:
     Session paths look like:
     ~/.claude/projects/-Users-tijs-projects-claude-code-live/abc123.jsonl
 
-    The project folder is URL-encoded with dashes, so we decode it and
-    return the last component (e.g., "claude-code-live").
+    The folder name uses dashes for path separators, but project names can
+    also contain dashes. We use heuristics to find common directory markers
+    and extract the project name after them.
     """
     # Get the parent folder name (the project identifier)
-    project_folder = session_path.parent.name
+    folder = session_path.parent.name
 
-    # Decode: "-Users-tijs-projects-foo" -> "/Users/tijs/projects/foo"
-    # First replace leading dash with /
-    if project_folder.startswith("-"):
-        decoded = "/" + project_folder[1:]
-    else:
-        decoded = project_folder
+    # URL decode any percent-encoded chars first
+    folder = urllib.parse.unquote(folder)
 
-    # Replace remaining dashes that are path separators
-    # This is tricky - we need to handle both path separators and actual dashes
-    # The encoding uses dashes for /, so /Users/foo-bar becomes -Users-foo-bar
-    # We decode by treating each dash as a potential /
-    decoded = decoded.replace("-", "/")
+    # Look for common directory markers and take everything after
+    # Order matters - check more specific patterns first
+    markers = ["-projects-", "-repos-", "-src-", "-code-", "-github-", "-tmp-", "-os-"]
+    for marker in markers:
+        if marker in folder:
+            # Take everything after the marker
+            project_name = folder.split(marker, 1)[1]
+            return project_name if project_name else folder
 
-    # URL decode any percent-encoded chars
-    decoded = urllib.parse.unquote(decoded)
+    # Fallback: try to extract after username pattern (-Users-xxx- or -home-xxx-)
+    import re
+    match = re.match(r"^-(?:Users|home)-[^-]+-(.+)$", folder)
+    if match:
+        return match.group(1)
 
-    # Return just the last path component
-    return Path(decoded).name or project_folder
+    # Last resort: return the folder name as-is (strip leading dash)
+    return folder.lstrip("-") or folder
 
 
 def get_session_id(session_path: Path) -> str:
