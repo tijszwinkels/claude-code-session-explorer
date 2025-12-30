@@ -12,7 +12,7 @@
             <span class="status-dot"></span>
             <span id="status-text">Connecting...</span>
         </div>
-        <div id="session-count">0 sessions</div>
+        <div id="session-info">last 10 sessions</div>
     </div>
     <div class="tab-bar" id="tab-bar">
         <div class="tabs" id="tabs"></div>
@@ -31,7 +31,7 @@
         const tabsContainer = document.getElementById('tabs');
         const statusBar = document.getElementById('status-bar');
         const statusText = document.getElementById('status-text');
-        const sessionCount = document.getElementById('session-count');
+        const sessionInfo = document.getElementById('session-info');
         const autoFollowCheckbox = document.getElementById('auto-follow');
         const autoFollowLabel = document.getElementById('auto-follow-label');
 
@@ -60,11 +60,6 @@
         function updateStatus(status, text) {
             statusBar.className = 'status-bar ' + status;
             statusText.textContent = text;
-        }
-
-        function updateSessionCount() {
-            const count = sessions.size;
-            sessionCount.textContent = count + ' session' + (count !== 1 ? 's' : '');
         }
 
         function isNearBottom() {
@@ -171,7 +166,6 @@
                 lastUpdatedAt: lastUpdatedAt || null
             };
             sessions.set(sessionId, session);
-            updateSessionCount();
             updateTabTooltip(session);
 
             // If this is the first session, activate it
@@ -189,7 +183,6 @@
             session.container.remove();
             session.tab.remove();
             sessions.delete(sessionId);
-            updateSessionCount();
 
             // If we removed the active session, switch to another
             if (activeSessionId === sessionId) {
@@ -319,7 +312,7 @@
                 data.sessions.forEach(function(session) {
                     createSession(session.id, session.name, session.startedAt, session.lastUpdatedAt);
                 });
-                updateStatus('', 'Connected - ' + data.sessions.length + ' sessions');
+                updateStatus('', 'Connected');
 
                 // Mark catchup as complete after a short delay
                 // (allows initial message burst to finish without triggering auto-follow)
@@ -335,7 +328,6 @@
             eventSource.addEventListener('session_added', function(e) {
                 const data = JSON.parse(e.data);
                 const session = createSession(data.id, data.name, data.startedAt, data.lastUpdatedAt);
-                updateSessionCount();
                 // Auto-switch to newly added sessions (they're likely the active one)
                 if (autoFollow && session) {
                     switchToSession(data.id, true);  // Scroll to bottom on auto-follow
