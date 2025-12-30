@@ -3,6 +3,7 @@
 import logging
 import webbrowser
 from pathlib import Path
+from threading import Timer
 
 import click
 import uvicorn
@@ -92,11 +93,13 @@ def main(
         count += 1
     click.echo(f"Found {count} session(s) to watch")
 
-    # Open browser
+    # Open browser after a short delay to let server start
     url = f"http://{host}:{port}"
     if not no_open:
-        click.echo(f"Opening {url} in browser...")
-        webbrowser.open(url)
+        def open_browser():
+            click.echo(f"Opening {url} in browser...")
+            webbrowser.open(url)
+        Timer(1.0, open_browser).start()
     else:
         click.echo(f"Server running at {url}")
 
