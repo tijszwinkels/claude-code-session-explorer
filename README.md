@@ -4,7 +4,7 @@ Live-updating transcript viewer for Claude Code sessions.
 
 ## Overview
 
-Unlike static HTML generators, this tool provides real-time updates as your Claude Code session progresses. New messages appear automatically within ~1 second.
+This tool provides real-time updates as your Claude Code session progresses. New messages appear automatically within ~1 second.
 
 ## Installation
 
@@ -62,7 +62,9 @@ uv run claude-code-live --debug
 
 ## Credits
 
-This project is based on [claude-code-transcripts](https://github.com/simonw/claude-code-transcripts) by [Simon Willison](https://simonwillison.net/). The HTML rendering, CSS styling, and message formatting are adapted from that project.
+This project is based on [claude-code-transcripts](https://github.com/simonw/claude-code-transcripts) by [Simon Willison](https://simonwillison.net/). This project allows to generate html-pages from claude code transcripts, put those in gists, and attach them to commit logs, which is tremendously useful. The HTML rendering, CSS styling, and message formatting are adapted from that project.
+
+This is an adaptation that allows to view the transcripts in a browser while claude is working. It's more readable than the claude code output itself, so I keep this open in a second screen while I'm working, so I can easily keep track of what the coding agent is doing.
 
 ## License
 
