@@ -373,9 +373,9 @@ pre code { background: none; padding: 0; }
 /* Session containers */
 .session-container { display: none; }
 .session-container.active { display: block; }
-body { padding-top: 88px; padding-bottom: 80px; }
+body { padding-top: 88px; padding-bottom: 100px; }
 /* Input bar for sending messages */
-.input-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px; background: var(--card-bg); border-top: 1px solid #e0e0e0; display: flex; gap: 12px; align-items: flex-end; z-index: 1000; }
+.input-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px; background: var(--card-bg); border-top: 1px solid #e0e0e0; display: flex; gap: 12px; align-items: flex-start; z-index: 1000; }
 .input-bar.hidden { display: none; }
 .input-bar-left { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .input-textarea { width: 100%; min-height: 40px; max-height: 120px; padding: 10px 14px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem; resize: none; outline: none; line-height: 1.4; }
