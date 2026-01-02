@@ -49,6 +49,11 @@ logger = logging.getLogger(__name__)
     default=10,
     help="Maximum number of sessions to track (default: 10)",
 )
+@click.option(
+    "--enable-send",
+    is_flag=True,
+    help="Enable sending messages to Claude Code sessions (security: allows command execution)",
+)
 def main(
     session: Path | None,
     port: int,
@@ -56,6 +61,7 @@ def main(
     no_open: bool,
     debug: bool,
     max_sessions: int,
+    enable_send: bool,
 ) -> None:
     """Start a live-updating transcript viewer for Claude Code sessions.
 
@@ -75,6 +81,10 @@ def main(
     # Configure server
     from . import server
     server.MAX_SESSIONS = max_sessions
+    server.set_send_enabled(enable_send)
+
+    if enable_send:
+        click.echo("Send feature ENABLED - messages can be sent to Claude Code sessions")
 
     # If a specific session is provided, add it first
     if session is not None:

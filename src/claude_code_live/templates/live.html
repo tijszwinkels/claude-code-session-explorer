@@ -28,6 +28,23 @@
         <h1>Claude Code Live</h1>
         <div id="sessions"></div>
     </div>
+    <div class="input-bar hidden" id="input-bar">
+        <div class="input-bar-left">
+            <textarea
+                id="message-input"
+                class="input-textarea"
+                placeholder="Send a message... (Shift+Enter for newline)"
+                rows="1"
+            ></textarea>
+            <div class="input-status" id="input-status"></div>
+        </div>
+        <button class="send-btn" id="send-btn">
+            <span>Send</span>
+        </button>
+        <button class="interrupt-btn hidden" id="interrupt-btn">
+            <span>Stop</span>
+        </button>
+    </div>
     <script>
     (function() {
         const sessionsContainer = document.getElementById('sessions');
@@ -38,6 +55,11 @@
         const autoFollowCheckbox = document.getElementById('auto-follow');
         const autoFollowLabel = document.getElementById('auto-follow-label');
         const searchInput = document.getElementById('search-input');
+        const inputBar = document.getElementById('input-bar');
+        const messageInput = document.getElementById('message-input');
+        const inputStatus = document.getElementById('input-status');
+        const sendBtn = document.getElementById('send-btn');
+        const interruptBtn = document.getElementById('interrupt-btn');
 
         let eventSource = null;
         const MAX_MESSAGES = 500;
@@ -48,6 +70,8 @@
         let autoFollow = true;
         let autoFollowDebounce = null;
         let catchupComplete = false;  // Don't auto-follow during initial catchup
+        let sendEnabled = false;  // Whether sending messages is enabled
+        const sessionStatus = new Map();  // session_id -> {running, queued_messages}
 
         // Update auto-follow UI
         function updateAutoFollowUI() {
@@ -84,6 +108,124 @@
         searchInput.addEventListener('input', function() {
             filterTabs(this.value);
         });
+
+        // Send functionality
+        async function checkSendEnabled() {
+            try {
+                const response = await fetch('/send-enabled');
+                const data = await response.json();
+                sendEnabled = data.enabled;
+                if (sendEnabled) {
+                    inputBar.classList.remove('hidden');
+                } else {
+                    inputBar.classList.add('hidden');
+                }
+            } catch (e) {
+                console.error('Failed to check send-enabled:', e);
+                sendEnabled = false;
+            }
+        }
+
+        function updateInputBarUI() {
+            if (!activeSessionId) {
+                sendBtn.disabled = true;
+                inputStatus.textContent = '';
+                inputStatus.className = 'input-status';
+                sendBtn.classList.remove('hidden');
+                interruptBtn.classList.add('hidden');
+                return;
+            }
+
+            const status = sessionStatus.get(activeSessionId) || { running: false, queued_messages: 0 };
+
+            if (status.running) {
+                inputStatus.className = 'input-status running';
+                sendBtn.classList.add('hidden');
+                interruptBtn.classList.remove('hidden');
+
+                if (status.queued_messages > 0) {
+                    inputStatus.innerHTML = '<span class="spinner"></span> ' +
+                        status.queued_messages + ' message' + (status.queued_messages > 1 ? 's' : '') + ' queued...';
+                } else {
+                    inputStatus.innerHTML = '<span class="spinner"></span> Claude is thinking...';
+                }
+            } else {
+                inputStatus.textContent = '';
+                inputStatus.className = 'input-status';
+                sendBtn.classList.remove('hidden');
+                interruptBtn.classList.add('hidden');
+            }
+
+            sendBtn.disabled = !messageInput.value.trim();
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || !activeSessionId) return;
+
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch('/sessions/' + activeSessionId + '/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+
+                if (response.ok) {
+                    messageInput.value = '';
+                    autoResizeTextarea();
+                } else {
+                    const data = await response.json();
+                    alert('Error: ' + (data.detail || 'Failed to send message'));
+                }
+            } catch (e) {
+                alert('Error: Failed to send message');
+                console.error('Send error:', e);
+            }
+
+            updateInputBarUI();
+        }
+
+        async function interruptSession() {
+            if (!activeSessionId) return;
+
+            try {
+                const response = await fetch('/sessions/' + activeSessionId + '/interrupt', {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    console.error('Interrupt failed:', data.detail);
+                }
+            } catch (e) {
+                console.error('Interrupt error:', e);
+            }
+        }
+
+        function autoResizeTextarea() {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+        }
+
+        // Input event handlers
+        messageInput.addEventListener('input', function() {
+            autoResizeTextarea();
+            updateInputBarUI();
+        });
+
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!sendBtn.disabled && !sendBtn.classList.contains('hidden')) {
+                    sendMessage();
+                }
+            }
+        });
+
+        sendBtn.addEventListener('click', sendMessage);
+        interruptBtn.addEventListener('click', interruptSession);
 
         function updateStatus(status, text) {
             statusBar.className = 'status-bar ' + status;
@@ -270,6 +412,9 @@
             session.tab.classList.add('active');
             activeSessionId = sessionId;
 
+            // Update input bar for new active session
+            updateInputBarUI();
+
             // Scroll to bottom if requested (e.g., after auto-follow switch)
             if (scrollToBottom) {
                 requestAnimationFrame(function() {
@@ -334,6 +479,9 @@
             updateStatus('reconnecting', 'Connecting...');
             catchupComplete = false;  // Reset for new connection
 
+            // Check if sending is enabled
+            checkSendEnabled();
+
             eventSource = new EventSource('/events');
 
             eventSource.addEventListener('sessions', function(e) {
@@ -381,6 +529,18 @@
 
             eventSource.addEventListener('ping', function(e) {
                 // Keep-alive, no action needed
+            });
+
+            eventSource.addEventListener('session_status', function(e) {
+                const data = JSON.parse(e.data);
+                sessionStatus.set(data.session_id, {
+                    running: data.running,
+                    queued_messages: data.queued_messages
+                });
+                // Update UI if this is the active session
+                if (data.session_id === activeSessionId) {
+                    updateInputBarUI();
+                }
             });
 
             eventSource.addEventListener('reinitialize', function(e) {

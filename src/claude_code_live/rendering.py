@@ -373,8 +373,25 @@ pre code { background: none; padding: 0; }
 /* Session containers */
 .session-container { display: none; }
 .session-container.active { display: block; }
-body { padding-top: 88px; }
-@media (max-width: 600px) { body { padding: 8px; padding-top: 88px; } .message { border-radius: 8px; } .message-content { padding: 12px; } pre { font-size: 0.8rem; padding: 8px; } }
+body { padding-top: 88px; padding-bottom: 80px; }
+/* Input bar for sending messages */
+.input-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px; background: var(--card-bg); border-top: 1px solid #e0e0e0; display: flex; gap: 12px; align-items: flex-end; z-index: 1000; }
+.input-bar.hidden { display: none; }
+.input-bar-left { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.input-textarea { width: 100%; min-height: 40px; max-height: 120px; padding: 10px 14px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem; resize: none; outline: none; line-height: 1.4; }
+.input-textarea:focus { border-color: var(--user-border); box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1); }
+.input-textarea::placeholder { color: var(--text-muted); }
+.input-status { font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; min-height: 20px; }
+.input-status.running { color: #f57c00; }
+.input-status .spinner { width: 14px; height: 14px; border: 2px solid #f57c00; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.send-btn, .interrupt-btn { padding: 10px 16px; border: none; border-radius: 8px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; }
+.send-btn { background: var(--user-border); color: white; }
+.send-btn:hover { background: #1565c0; }
+.send-btn:disabled { background: #bdbdbd; cursor: not-allowed; }
+.interrupt-btn { background: #f44336; color: white; }
+.interrupt-btn:hover { background: #d32f2f; }
+@media (max-width: 600px) { body { padding: 8px; padding-top: 88px; padding-bottom: 80px; } .message { border-radius: 8px; } .message-content { padding: 12px; } pre { font-size: 0.8rem; padding: 8px; } .input-bar { padding: 8px; } }
 """
 
 # JavaScript from claude-code-transcripts + live-specific enhancements
