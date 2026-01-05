@@ -6,7 +6,6 @@ import logging
 import shutil
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -17,20 +16,31 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from .rendering import CSS, render_message, get_template
-from .tailer import (
-    SessionTailer,
-    find_recent_sessions,
-    get_session_id,
-    get_session_name,
+from .sessions import (
+    MAX_SESSIONS,
+    SessionInfo,
+    add_session,
+    get_known_session_files,
+    get_projects_dir,
+    get_session,
+    get_sessions,
+    get_sessions_list,
+    get_sessions_lock,
+    remove_session,
+    session_count,
 )
+from .tailer import find_recent_sessions, get_session_id
 
 logger = logging.getLogger(__name__)
 
 # Configuration
-MAX_SESSIONS = 10
 CATCHUP_TIMEOUT = 30  # seconds - max time for catchup before telling client to reinitialize
 _send_enabled = False  # Enable with --enable-send CLI flag
 _skip_permissions = False  # Enable with --dangerously-skip-permissions CLI flag
+
+# Global state for server (not session-related)
+_clients: set[asyncio.Queue] = set()
+_watch_task: asyncio.Task | None = None
 
 
 def set_send_enabled(enabled: bool) -> None:
@@ -59,149 +69,6 @@ class NewSessionRequest(BaseModel):
     """Request body for starting a new session."""
     message: str  # Initial message to send (required)
     cwd: str | None = None  # Working directory (optional)
-
-
-@dataclass
-class SessionInfo:
-    """Information about a tracked session."""
-
-    path: Path
-    tailer: SessionTailer
-    name: str = ""
-    session_id: str = ""
-    # Process management for sending messages
-    process: asyncio.subprocess.Process | None = None
-    message_queue: list[str] = field(default_factory=list)
-
-    def __post_init__(self):
-        if not self.name:
-            self.name = get_session_name(self.path)
-        if not self.session_id:
-            self.session_id = get_session_id(self.path)
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization."""
-        # Get timestamps
-        started_at = self.tailer.get_first_timestamp()
-        try:
-            last_updated = self.path.stat().st_mtime
-        except OSError:
-            last_updated = None
-
-        return {
-            "id": self.session_id,
-            "name": self.name,
-            "path": str(self.path),
-            "startedAt": started_at,
-            "lastUpdatedAt": last_updated,
-        }
-
-
-# Global state
-_sessions: dict[str, SessionInfo] = {}  # session_id -> SessionInfo
-_sessions_lock: asyncio.Lock | None = None  # Protects _sessions during iteration
-_clients: set[asyncio.Queue] = set()
-_watch_task: asyncio.Task | None = None
-_projects_dir: Path | None = None
-_known_session_files: set[Path] = set()  # Track known files to detect new ones
-
-
-def _get_sessions_lock() -> asyncio.Lock:
-    """Get or create the sessions lock (must be created in event loop context)."""
-    global _sessions_lock
-    if _sessions_lock is None:
-        _sessions_lock = asyncio.Lock()
-    return _sessions_lock
-
-
-def get_projects_dir() -> Path:
-    """Get the projects directory path."""
-    global _projects_dir
-    if _projects_dir is None:
-        _projects_dir = Path.home() / ".claude" / "projects"
-    return _projects_dir
-
-
-def set_projects_dir(path: Path) -> None:
-    """Set the projects directory path (for testing)."""
-    global _projects_dir
-    _projects_dir = path
-
-
-def get_oldest_session_id() -> str | None:
-    """Find the oldest session by modification time."""
-    if not _sessions:
-        return None
-    oldest = min(
-        _sessions.items(),
-        key=lambda x: x[1].path.stat().st_mtime if x[1].path.exists() else float("inf"),
-    )
-    return oldest[0]
-
-
-def add_session(path: Path, evict_oldest: bool = True) -> tuple[SessionInfo | None, str | None]:
-    """Add a session to track.
-
-    Returns a tuple of (SessionInfo if added, evicted_session_id if one was removed).
-    Returns (None, None) if already tracked or if file is empty.
-    If at the session limit and evict_oldest=True, removes the oldest session to make room.
-    """
-    session_id = get_session_id(path)
-
-    if session_id in _sessions:
-        return None, None
-
-    # Skip empty files (claude --resume creates empty files before connecting)
-    try:
-        if path.stat().st_size == 0:
-            logger.debug(f"Skipping empty session file: {path}")
-            return None, None
-    except OSError:
-        return None, None
-
-    evicted_id = None
-    # If at limit, remove the oldest session to make room
-    if len(_sessions) >= MAX_SESSIONS:
-        if evict_oldest:
-            oldest_id = get_oldest_session_id()
-            if oldest_id:
-                logger.info(f"Session limit reached, removing oldest: {oldest_id}")
-                remove_session(oldest_id)
-                evicted_id = oldest_id
-        else:
-            logger.debug(f"Session limit reached, not adding {path}")
-            return None, None
-
-    tailer = SessionTailer(path)
-    # Advance tailer position to end of file so process_session_messages
-    # only picks up truly new messages (catchup uses read_all with fresh tailer)
-    tailer.read_new_lines()
-    info = SessionInfo(path=path, tailer=tailer)
-    _sessions[session_id] = info
-    _known_session_files.add(path)
-    logger.info(f"Added session: {info.name} ({session_id})")
-    return info, evicted_id
-
-
-def remove_session(session_id: str) -> bool:
-    """Remove a session from tracking."""
-    if session_id in _sessions:
-        info = _sessions.pop(session_id)
-        _known_session_files.discard(info.path)
-        logger.info(f"Removed session: {info.name} ({session_id})")
-        return True
-    return False
-
-
-def get_sessions_list() -> list[dict]:
-    """Get list of all tracked sessions, sorted by modification time (newest first)."""
-    # Sort by file modification time, newest first
-    sorted_sessions = sorted(
-        _sessions.values(),
-        key=lambda info: info.path.stat().st_mtime if info.path.exists() else 0,
-        reverse=True,
-    )
-    return [info.to_dict() for info in sorted_sessions]
 
 
 async def broadcast_event(event_type: str, data: dict) -> None:
@@ -252,7 +119,7 @@ async def broadcast_session_removed(session_id: str) -> None:
 
 async def broadcast_session_status(session_id: str) -> None:
     """Broadcast session status (running state, queue size)."""
-    info = _sessions.get(session_id)
+    info = get_session(session_id)
     if info is None:
         return
     await broadcast_event("session_status", {
@@ -264,7 +131,7 @@ async def broadcast_session_status(session_id: str) -> None:
 
 async def run_claude_for_session(session_id: str, message: str) -> None:
     """Send a message to a Claude Code session and track the process."""
-    info = _sessions.get(session_id)
+    info = get_session(session_id)
     if info is None:
         logger.error(f"Session not found: {session_id}")
         return
@@ -306,7 +173,7 @@ async def run_claude_for_session(session_id: str, message: str) -> None:
 
 async def process_session_messages(session_id: str) -> None:
     """Read new messages from a session and broadcast to clients."""
-    info = _sessions.get(session_id)
+    info = get_session(session_id)
     if info is None:
         return
 
@@ -327,8 +194,8 @@ async def check_for_new_sessions() -> None:
     for f in projects_dir.glob("**/*.jsonl"):
         if f.name.startswith("agent-"):
             continue
-        if f not in _known_session_files:
-            async with _get_sessions_lock():
+        if f not in get_known_session_files():
+            async with get_sessions_lock():
                 info, evicted_id = add_session(f)
                 if evicted_id:
                     await broadcast_session_removed(evicted_id)
@@ -358,7 +225,7 @@ async def watch_loop() -> None:
                 if changed_path.name.startswith("agent-"):
                     continue
 
-                async with _get_sessions_lock():
+                async with get_sessions_lock():
                     if change_type == watchfiles.Change.added:
                         # New session file
                         info, evicted_id = add_session(changed_path)
@@ -371,9 +238,9 @@ async def watch_loop() -> None:
                     elif change_type == watchfiles.Change.modified:
                         # Existing file modified
                         session_id = get_session_id(changed_path)
-                        if session_id in _sessions:
+                        if get_session(session_id) is not None:
                             await process_session_messages(session_id)
-                        elif changed_path not in _known_session_files:
+                        elif changed_path not in get_known_session_files():
                             # File we haven't seen - might be new
                             info, evicted_id = add_session(changed_path)
                             if evicted_id:
@@ -396,11 +263,11 @@ async def lifespan(app: FastAPI):
 
     # Startup: find recent sessions
     recent = find_recent_sessions(get_projects_dir(), limit=MAX_SESSIONS)
-    async with _get_sessions_lock():
+    async with get_sessions_lock():
         for path in recent:
             add_session(path, evict_oldest=False)  # No eviction needed at startup
 
-    if not _sessions:
+    if session_count() == 0:
         logger.warning("No session files found")
 
     # Start watching for changes
@@ -431,7 +298,7 @@ async def index() -> HTMLResponse:
 @app.get("/sessions")
 async def list_sessions() -> dict:
     """List all tracked sessions."""
-    async with _get_sessions_lock():
+    async with get_sessions_lock():
         return {"sessions": get_sessions_list()}
 
 
@@ -442,7 +309,7 @@ async def event_generator(request: Request) -> AsyncGenerator[dict, None]:
 
     try:
         # Send sessions list
-        async with _get_sessions_lock():
+        async with get_sessions_lock():
             sessions_data = get_sessions_list()
         yield {
             "event": "sessions",
@@ -450,12 +317,12 @@ async def event_generator(request: Request) -> AsyncGenerator[dict, None]:
         }
 
         # Send existing messages for each session (catchup)
-        # Hold lock to prevent _sessions modification during iteration
+        # Hold lock to prevent sessions modification during iteration
         catchup_start = time.monotonic()
         catchup_timed_out = False
 
-        async with _get_sessions_lock():
-            for session_id, info in _sessions.items():
+        async with get_sessions_lock():
+            for session_id, info in get_sessions().items():
                 existing = info.tailer.read_all()
                 for entry in existing:
                     # Check if catchup is taking too long (slow client)
@@ -520,7 +387,7 @@ async def health() -> dict:
     """Health check endpoint."""
     return {
         "status": "ok",
-        "sessions": len(_sessions),
+        "sessions": session_count(),
         "clients": len(_clients),
     }
 
@@ -534,7 +401,7 @@ async def send_enabled() -> dict:
 @app.get("/sessions/{session_id}/status")
 async def session_status(session_id: str) -> dict:
     """Get the status of a session (running state, queue size)."""
-    info = _sessions.get(session_id)
+    info = get_session(session_id)
     if info is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return {
@@ -560,7 +427,7 @@ async def send_message(session_id: str, request: SendMessageRequest) -> dict:
             detail="Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code",
         )
 
-    info = _sessions.get(session_id)
+    info = get_session(session_id)
     if info is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -593,7 +460,7 @@ async def interrupt_session(session_id: str) -> dict:
             detail="Send feature is disabled. Start server with --enable-send to enable.",
         )
 
-    info = _sessions.get(session_id)
+    info = get_session(session_id)
     if info is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
