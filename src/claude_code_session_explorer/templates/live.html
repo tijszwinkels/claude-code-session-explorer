@@ -770,6 +770,17 @@
         }
 
         function reorderSidebar() {
+            // FLIP animation: capture positions before reorder
+            const projectPositions = new Map();
+            const sessionPositions = new Map();
+
+            projects.forEach(function(project) {
+                projectPositions.set(project.name, project.element.getBoundingClientRect());
+            });
+            sessions.forEach(function(session) {
+                sessionPositions.set(session.id, session.sidebarItem.getBoundingClientRect());
+            });
+
             // Sort projects by lastActivity
             const sortedProjects = Array.from(projects.values()).sort((a, b) => b.lastActivity - a.lastActivity);
 
@@ -785,6 +796,35 @@
                 sortedSessions.forEach(function(session) {
                     project.sessionListElement.appendChild(session.sidebarItem);
                 });
+            });
+
+            // FLIP animation: animate from old to new positions
+            projects.forEach(function(project) {
+                const oldRect = projectPositions.get(project.name);
+                const newRect = project.element.getBoundingClientRect();
+                if (oldRect && Math.abs(oldRect.top - newRect.top) > 1) {
+                    const deltaY = oldRect.top - newRect.top;
+                    project.element.style.transform = `translateY(${deltaY}px)`;
+                    project.element.style.transition = 'none';
+                    requestAnimationFrame(function() {
+                        project.element.style.transition = 'transform 0.2s ease-out';
+                        project.element.style.transform = '';
+                    });
+                }
+            });
+
+            sessions.forEach(function(session) {
+                const oldRect = sessionPositions.get(session.id);
+                const newRect = session.sidebarItem.getBoundingClientRect();
+                if (oldRect && Math.abs(oldRect.top - newRect.top) > 1) {
+                    const deltaY = oldRect.top - newRect.top;
+                    session.sidebarItem.style.transform = `translateY(${deltaY}px)`;
+                    session.sidebarItem.style.transition = 'none';
+                    requestAnimationFrame(function() {
+                        session.sidebarItem.style.transition = 'transform 0.2s ease-out';
+                        session.sidebarItem.style.transform = '';
+                    });
+                }
             });
         }
 
