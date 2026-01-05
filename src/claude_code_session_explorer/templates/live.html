@@ -717,7 +717,7 @@
                 if (e.target.classList.contains('close-btn')) {
                     removeSession(sessionId);
                 } else {
-                    switchToSession(sessionId);
+                    switchToSession(sessionId, true);  // Scroll to bottom when opening
                     // Close sidebar on mobile
                     if (isMobile()) {
                         sidebarOpen = false;
