@@ -4,21 +4,22 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from claude_code_live import server
-from claude_code_live.server import app, add_session
+from claude_code_live import server, sessions
+from claude_code_live.server import app
+from claude_code_live.sessions import add_session
 
 
 @pytest.fixture(autouse=True)
 def reset_server_state():
     """Reset server state before each test."""
-    server._sessions.clear()
+    sessions.get_sessions().clear()
     server._clients.clear()
-    server._known_session_files.clear()
+    sessions.get_known_session_files().clear()
     server.set_send_enabled(False)  # Reset send feature state
     yield
-    server._sessions.clear()
+    sessions.get_sessions().clear()
     server._clients.clear()
-    server._known_session_files.clear()
+    sessions.get_known_session_files().clear()
     server.set_send_enabled(False)
 
 
@@ -116,54 +117,54 @@ class TestSessionManagement:
 
         assert info is None
         assert evicted_id is None
-        assert "empty" not in server._sessions
+        assert "empty" not in sessions.get_sessions()
 
     def test_session_limit_with_eviction(self, tmp_path):
         """Test that session limit evicts oldest sessions."""
         import time
 
         # Create more sessions than the limit, with slight time delays
-        for i in range(server.MAX_SESSIONS + 2):
+        for i in range(sessions.MAX_SESSIONS + 2):
             session_file = tmp_path / f"session_{i}.jsonl"
             session_file.write_text('{"type": "user"}\n')
             add_session(session_file)
             time.sleep(0.01)  # Ensure different mtime
 
         # Should still have MAX_SESSIONS (oldest got evicted)
-        assert len(server._sessions) == server.MAX_SESSIONS
+        assert len(sessions.get_sessions()) == sessions.MAX_SESSIONS
         # First session should have been evicted
-        assert "session_0" not in server._sessions
+        assert "session_0" not in sessions.get_sessions()
 
     def test_session_limit_without_eviction(self, tmp_path):
         """Test that session limit is respected when eviction is disabled."""
         # Create more sessions than the limit without eviction
-        for i in range(server.MAX_SESSIONS + 2):
+        for i in range(sessions.MAX_SESSIONS + 2):
             session_file = tmp_path / f"session_{i}.jsonl"
             session_file.write_text('{"type": "user"}\n')
             add_session(session_file, evict_oldest=False)
 
         # Should stop at MAX_SESSIONS
-        assert len(server._sessions) == server.MAX_SESSIONS
+        assert len(sessions.get_sessions()) == sessions.MAX_SESSIONS
 
     def test_remove_session(self, temp_jsonl_file):
         """Test removing a session."""
         info, _ = add_session(temp_jsonl_file)
         session_id = info.session_id
 
-        assert server.remove_session(session_id) is True
-        assert session_id not in server._sessions
+        assert sessions.remove_session(session_id) is True
+        assert session_id not in sessions.get_sessions()
 
     def test_remove_nonexistent_session(self):
         """Test removing a session that doesn't exist."""
-        assert server.remove_session("nonexistent") is False
+        assert sessions.remove_session("nonexistent") is False
 
     def test_get_sessions_list(self, temp_jsonl_file):
         """Test getting the sessions list."""
         add_session(temp_jsonl_file)
-        sessions = server.get_sessions_list()
+        sessions_list = sessions.get_sessions_list()
 
-        assert len(sessions) == 1
-        assert sessions[0]["id"] == temp_jsonl_file.stem
+        assert len(sessions_list) == 1
+        assert sessions_list[0]["id"] == temp_jsonl_file.stem
 
 
 class TestSendFeature:
