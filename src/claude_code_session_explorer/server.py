@@ -137,8 +137,14 @@ async def broadcast_session_status(session_id: str) -> None:
     })
 
 
-async def run_claude_for_session(session_id: str, message: str) -> None:
-    """Send a message to a Claude Code session and track the process."""
+async def run_claude_for_session(session_id: str, message: str, fork: bool = False) -> None:
+    """Send a message to a Claude Code session and track the process.
+
+    Args:
+        session_id: The session to send the message to
+        message: The message to send
+        fork: If True, use --fork-session to create a new session with the conversation history
+    """
     info = get_session(session_id)
     if info is None:
         logger.error(f"Session not found: {session_id}")
@@ -153,6 +159,8 @@ async def run_claude_for_session(session_id: str, message: str) -> None:
 
         # Build command arguments
         cmd_args = ["claude", "-p", message, "--resume", session_id]
+        if fork:
+            cmd_args.append("--fork-session")
         if _skip_permissions:
             cmd_args.append("--dangerously-skip-permissions")
 
@@ -166,8 +174,11 @@ async def run_claude_for_session(session_id: str, message: str) -> None:
             stderr=asyncio.subprocess.PIPE,
         )
 
-        info.process = proc
-        await broadcast_session_status(session_id)
+        # Only track process on the original session if not forking
+        # (forked session will create its own session file and be picked up by file watcher)
+        if not fork:
+            info.process = proc
+            await broadcast_session_status(session_id)
 
         # Wait for completion
         _, stderr = await proc.communicate()
@@ -179,14 +190,15 @@ async def run_claude_for_session(session_id: str, message: str) -> None:
         logger.error(f"Error running Claude for {session_id}: {e}")
 
     finally:
-        info.process = None
+        if not fork:
+            info.process = None
 
-        # Process queue if messages waiting
-        if info.message_queue:
-            next_message = info.message_queue.pop(0)
-            asyncio.create_task(run_claude_for_session(session_id, next_message))
+            # Process queue if messages waiting
+            if info.message_queue:
+                next_message = info.message_queue.pop(0)
+                asyncio.create_task(run_claude_for_session(session_id, next_message))
 
-        await broadcast_session_status(session_id)
+            await broadcast_session_status(session_id)
 
 
 async def process_session_messages(session_id: str) -> None:
@@ -477,6 +489,37 @@ async def send_message(session_id: str, request: SendMessageRequest) -> dict:
     asyncio.create_task(run_claude_for_session(session_id, message))
 
     return {"status": "sent", "session_id": session_id}
+
+
+@app.post("/sessions/{session_id}/fork")
+async def fork_session(session_id: str, request: SendMessageRequest) -> dict:
+    """Fork a session: create a new session with conversation history and send a message."""
+    if not _fork_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Fork feature is disabled. Start server with --fork to enable.",
+        )
+
+    # Check if Claude CLI is available
+    if shutil.which("claude") is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code",
+        )
+
+    info = get_session(session_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    # Start the Claude process with fork=True
+    # This uses --fork-session to create a new session with the conversation history
+    asyncio.create_task(run_claude_for_session(session_id, message, fork=True))
+
+    return {"status": "forking", "session_id": session_id}
 
 
 @app.post("/sessions/{session_id}/interrupt")

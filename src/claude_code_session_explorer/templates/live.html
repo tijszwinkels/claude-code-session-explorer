@@ -55,7 +55,7 @@
             <button class="send-btn" id="send-btn">
                 <span>Send</span>
             </button>
-            <button class="fork-btn hidden" id="fork-btn" title="Send message as a new forked session">
+            <button class="fork-btn hidden" id="fork-btn" title="Fork: create new session with conversation history">
                 <span>Fork</span>
             </button>
             <button class="interrupt-btn hidden" id="interrupt-btn">
@@ -470,29 +470,28 @@
         }
 
         async function forkMessage() {
-            // Fork: create a new session with the message in the same project directory
+            // Fork: create a new session with the conversation history using --fork-session
             const message = messageInput.value.trim();
             if (!message || !activeSessionId) return;
 
             const session = sessions.get(activeSessionId);
             if (!session) return;
 
-            // Get the working directory from the current session
-            const cwd = session.cwd;
-            const projectName = session.projectName;
+            // Don't allow forking pending sessions
+            if (session.pending) {
+                alert('Cannot fork a pending session. Send a message first to create the session.');
+                return;
+            }
 
             forkBtn.disabled = true;
-            inputStatus.innerHTML = '<span class="spinner"></span> Creating forked session...';
+            inputStatus.innerHTML = '<span class="spinner"></span> Forking session...';
             inputStatus.className = 'input-status running';
 
             try {
-                const response = await fetch('/sessions/new', {
+                const response = await fetch('/sessions/' + activeSessionId + '/fork', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: message,
-                        cwd: cwd || null
-                    })
+                    body: JSON.stringify({ message: message })
                 });
 
                 if (response.ok) {
@@ -500,15 +499,15 @@
                     autoResizeTextarea();
                     inputStatus.textContent = '';
                     inputStatus.className = 'input-status';
-                    // The new session will appear via SSE and auto-switch will handle it
+                    // The new forked session will appear via SSE and auto-switch will handle it
                 } else {
                     const data = await response.json();
-                    alert('Error: ' + (data.detail || 'Failed to create forked session'));
+                    alert('Error: ' + (data.detail || 'Failed to fork session'));
                     inputStatus.textContent = '';
                     inputStatus.className = 'input-status';
                 }
             } catch (e) {
-                alert('Error: Failed to create forked session');
+                alert('Error: Failed to fork session');
                 console.error('Fork error:', e);
                 inputStatus.textContent = '';
                 inputStatus.className = 'input-status';
