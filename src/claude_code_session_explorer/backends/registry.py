@@ -56,6 +56,34 @@ def list_backends() -> list[str]:
     return list(_backends.keys())
 
 
+def get_all_backends(**config) -> list["CodingToolBackend"]:
+    """Get instances of all registered backends.
+
+    Args:
+        **config: Backend-specific configuration passed to constructors.
+
+    Returns:
+        List of all available backend instances.
+    """
+    ensure_backends_registered()
+    return [cls(**config) for cls in _backends.values()]
+
+
+def get_multi_backend(**config) -> "CodingToolBackend":
+    """Get a multi-backend wrapper that aggregates all backends.
+
+    Args:
+        **config: Backend-specific configuration passed to constructors.
+
+    Returns:
+        MultiBackend instance wrapping all available backends.
+    """
+    from .multi import MultiBackend
+
+    backends = get_all_backends(**config)
+    return MultiBackend(backends)
+
+
 def set_default_backend(name: str) -> None:
     """Set the default backend name.
 

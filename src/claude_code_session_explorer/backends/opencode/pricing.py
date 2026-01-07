@@ -95,8 +95,12 @@ def get_session_token_usage(session_path: Path, storage_dir: Path) -> TokenUsage
                 if msg_tokens:
                     totals.input_tokens += msg_tokens.get("input", 0)
                     totals.output_tokens += msg_tokens.get("output", 0)
-                    totals.cache_read_tokens += msg_tokens.get("cacheRead", 0)
-                    totals.cache_creation_tokens += msg_tokens.get("cacheWrite", 0)
+                    totals.cache_read_tokens += msg_tokens.get(
+                        "cache_read", msg_tokens.get("cacheRead", 0)
+                    )
+                    totals.cache_creation_tokens += msg_tokens.get(
+                        "cache_write", msg_tokens.get("cacheWrite", 0)
+                    )
                     totals.message_count += 1
 
                     # Calculate cost if not provided
@@ -107,9 +111,11 @@ def get_session_token_usage(session_path: Path, storage_dir: Path) -> TokenUsage
                         usage = {
                             "input_tokens": msg_tokens.get("input", 0),
                             "output_tokens": msg_tokens.get("output", 0),
-                            "cache_read_input_tokens": msg_tokens.get("cacheRead", 0),
+                            "cache_read_input_tokens": msg_tokens.get(
+                                "cache_read", msg_tokens.get("cacheRead", 0)
+                            ),
                             "cache_creation_input_tokens": msg_tokens.get(
-                                "cacheWrite", 0
+                                "cache_write", msg_tokens.get("cacheWrite", 0)
                             ),
                         }
                         totals.cost += calculate_message_cost(usage, model_id)
@@ -130,8 +136,12 @@ def get_session_token_usage(session_path: Path, storage_dir: Path) -> TokenUsage
 
                         totals.input_tokens += tokens.get("input", 0)
                         totals.output_tokens += tokens.get("output", 0)
-                        totals.cache_read_tokens += tokens.get("cacheRead", 0)
-                        totals.cache_creation_tokens += tokens.get("cacheWrite", 0)
+                        totals.cache_read_tokens += tokens.get(
+                            "cache_read", tokens.get("cacheRead", 0)
+                        )
+                        totals.cache_creation_tokens += tokens.get(
+                            "cache_write", tokens.get("cacheWrite", 0)
+                        )
 
                         if cost:
                             totals.cost += cost
@@ -140,9 +150,11 @@ def get_session_token_usage(session_path: Path, storage_dir: Path) -> TokenUsage
                             usage = {
                                 "input_tokens": tokens.get("input", 0),
                                 "output_tokens": tokens.get("output", 0),
-                                "cache_read_input_tokens": tokens.get("cacheRead", 0),
+                                "cache_read_input_tokens": tokens.get(
+                                    "cache_read", tokens.get("cacheRead", 0)
+                                ),
                                 "cache_creation_input_tokens": tokens.get(
-                                    "cacheWrite", 0
+                                    "cache_write", tokens.get("cacheWrite", 0)
                                 ),
                             }
                             totals.cost += calculate_message_cost(usage, model_id)

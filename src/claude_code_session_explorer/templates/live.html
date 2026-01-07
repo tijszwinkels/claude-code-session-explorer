@@ -554,7 +554,7 @@
             }
 
             const displayProjectName = projectName || 'New Session';
-            const session = createSession(pendingId, 'New Session', displayProjectName, null, null, null, cwd, null);
+            const session = createSession(pendingId, 'New Session', displayProjectName, null, null, null, cwd, null, null);
             session.pending = true;
             session.cwd = cwd;
 
@@ -876,13 +876,14 @@
             return project;
         }
 
-        function createSession(sessionId, name, projectName, firstMessage, startedAt, lastUpdatedAt, projectPath, tokenUsage) {
+        function createSession(sessionId, name, projectName, firstMessage, startedAt, lastUpdatedAt, projectPath, tokenUsage, backend) {
             if (sessions.has(sessionId)) return sessions.get(sessionId);
 
             // Create container with session header
             const container = document.createElement('div');
             container.className = 'session-container';
             container.dataset.session = sessionId;
+            if (backend) container.dataset.backend = backend;
 
             const displayTitle = truncateTitle(firstMessage || name, MAX_TITLE_LENGTH);
 
@@ -898,6 +899,8 @@
             const sidebarItem = document.createElement('div');
             sidebarItem.className = 'session-item';
             sidebarItem.dataset.session = sessionId;
+            if (backend) sidebarItem.dataset.backend = backend;
+
             sidebarItem.innerHTML = `
                 <span class="unread-dot"></span>
                 <span class="session-title">${escapeHtml(displayTitle)}</span>
@@ -950,7 +953,8 @@
                 startedAt: startedAt || null,
                 lastUpdatedAt: lastUpdatedAt || null,
                 cwd: projectPath || null,
-                tokenUsage: tokenUsage || null
+                tokenUsage: tokenUsage || null,
+                backend: backend || null
             };
             sessions.set(sessionId, session);
 
@@ -1044,6 +1048,14 @@
                 const updated = formatTimestamp(session.lastUpdatedAt);
                 const fullMessage = session.firstMessage || 'No message';
 
+                let backendHtml = '';
+                if (session.backend) {
+                    backendHtml = `
+                        <div class="tooltip-label">Backend</div>
+                        <div class="tooltip-value">${escapeHtml(session.backend)}</div>
+                    `;
+                }
+
                 let usageHtml = '';
                 if (session.tokenUsage && session.tokenUsage.message_count > 0) {
                     const u = session.tokenUsage;
@@ -1070,6 +1082,7 @@
                 }
 
                 sessionTooltip.innerHTML = `
+                    ${backendHtml}
                     <div class="tooltip-label">Created</div>
                     <div class="tooltip-value">${escapeHtml(started)}</div>
                     <div class="tooltip-label">Last updated</div>
@@ -1437,7 +1450,8 @@
                         session.startedAt,
                         session.lastUpdatedAt,
                         session.projectPath,
-                        session.tokenUsage
+                        session.tokenUsage,
+                        session.backend
                     );
                 });
                 reorderSidebar();
@@ -1479,7 +1493,8 @@
                         data.startedAt,
                         data.lastUpdatedAt,
                         data.projectPath,
-                        data.tokenUsage
+                        data.tokenUsage,
+                        data.backend
                     );
 
                     if (wasPendingActive && session) {
@@ -1494,7 +1509,8 @@
                         data.startedAt,
                         data.lastUpdatedAt,
                         data.projectPath,
-                        data.tokenUsage
+                        data.tokenUsage,
+                        data.backend
                     );
                     if (autoSwitch && session) {
                         switchToSession(data.id, true);
@@ -1511,7 +1527,7 @@
                 const data = JSON.parse(e.data);
                 if (data.type === 'html' && data.session_id) {
                     if (!sessions.has(data.session_id)) {
-                        createSession(data.session_id, data.session_id.substring(0, 8), 'Unknown', null, null, null, null, null);
+                        createSession(data.session_id, data.session_id.substring(0, 8), 'Unknown', null, null, null, null, null, null);
                     }
                     appendMessage(data.session_id, data.content);
                 }
