@@ -337,6 +337,39 @@ class TestOpenCodeRenderer:
         assert "user" in html.lower()
         assert "Hello, how are you?" in html
 
+    def test_render_user_message_strips_quotes_and_newlines(self):
+        """Test that user messages with surrounding quotes and trailing newlines are cleaned."""
+        from claude_code_session_explorer.backends.opencode.renderer import (
+            OpenCodeRenderer,
+        )
+
+        renderer = OpenCodeRenderer()
+
+        # OpenCode wraps user messages in quotes and adds trailing newline
+        entry = {
+            "info": {
+                "id": "msg_test",
+                "role": "user",
+                "time": {"created": 1704067200000},
+            },
+            "parts": [
+                {
+                    "id": "prt_test",
+                    "type": "text",
+                    "text": '"Hello, this is a test message"\n',
+                }
+            ],
+        }
+
+        html = renderer.render_message(entry)
+
+        assert "user" in html.lower()
+        # The quotes should be stripped
+        assert "Hello, this is a test message" in html
+        # The surrounding quotes should NOT appear in the output
+        assert '>"Hello' not in html
+        assert 'message"<' not in html
+
     def test_render_assistant_message(self, opencode_session):
         """Test rendering assistant message with text and tool."""
         from claude_code_session_explorer.backends.opencode.renderer import (

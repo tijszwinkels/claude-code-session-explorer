@@ -333,7 +333,7 @@ def render_user_message(info: dict, parts: list[dict]) -> str:
     for part in parts:
         part_type = part.get("type", "")
         if part_type == "text":
-            text = part.get("text", "")
+            text = part.get("text", "").strip()
             # Strip surrounding quotes if present (from session explorer send)
             if text.startswith('"') and text.endswith('"') and len(text) > 1:
                 text = text[1:-1]
