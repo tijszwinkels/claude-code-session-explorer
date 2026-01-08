@@ -47,8 +47,8 @@ def opencode_session(opencode_storage_dir):
     msg_dir = storage_dir / "message" / session_id
     msg_dir.mkdir(parents=True)
 
-    # Create user message
-    user_msg_id = "msg_user1"
+    # Create user message (ID starts with 'msg_0' to sort before assistant 'msg_1')
+    user_msg_id = "msg_0user1"
     user_msg = {
         "id": user_msg_id,
         "role": "user",
@@ -66,8 +66,8 @@ def opencode_session(opencode_storage_dir):
     }
     (user_part_dir / "prt_user1.json").write_text(json.dumps(user_part))
 
-    # Create assistant message
-    asst_msg_id = "msg_asst1"
+    # Create assistant message (ID starts with 'msg_1' to sort after user 'msg_0')
+    asst_msg_id = "msg_1asst1"
     asst_msg = {
         "id": asst_msg_id,
         "role": "assistant",
@@ -369,6 +369,38 @@ class TestOpenCodeRenderer:
         # The surrounding quotes should NOT appear in the output
         assert '>"Hello' not in html
         assert 'message"<' not in html
+
+    def test_render_user_message_escapes_html(self):
+        """Test that user messages with HTML-like content are escaped."""
+        from claude_code_session_explorer.backends.opencode.renderer import (
+            OpenCodeRenderer,
+        )
+
+        renderer = OpenCodeRenderer()
+
+        # User message with HTML-like content that could be interpreted as tags
+        entry = {
+            "info": {
+                "id": "msg_test",
+                "role": "user",
+                "time": {"created": 1704067200000},
+            },
+            "parts": [
+                {
+                    "id": "prt_test",
+                    "type": "text",
+                    "text": '"Create a YYYYMMDD-<title>.md file"\n',
+                }
+            ],
+        }
+
+        html = renderer.render_message(entry)
+
+        assert "user" in html.lower()
+        # The <title> should be escaped, not interpreted as HTML
+        assert "&lt;title&gt;" in html
+        # Should NOT contain raw <title> tag
+        assert "<title>" not in html
 
     def test_render_assistant_message(self, opencode_session):
         """Test rendering assistant message with text and tool."""

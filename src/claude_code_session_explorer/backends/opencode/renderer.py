@@ -79,6 +79,21 @@ def render_markdown_text(text: str) -> str:
     return markdown.markdown(text, extensions=["fenced_code", "tables"])
 
 
+def render_user_text(text: str) -> str:
+    """Render user text to HTML, escaping HTML entities for safety.
+
+    User messages should not contain raw HTML, so we escape angle brackets
+    before markdown processing to prevent HTML injection (e.g., <title> tags
+    being interpreted by the browser).
+    """
+    if not text:
+        return ""
+    # Escape HTML entities before markdown processing
+    # This prevents user-typed <tag> from being interpreted as HTML
+    text = html.escape(text)
+    return markdown.markdown(text, extensions=["fenced_code", "tables"])
+
+
 def is_json_like(text: str) -> bool:
     """Check if text looks like JSON."""
     if not text or not isinstance(text, str):
@@ -340,7 +355,7 @@ def render_user_message(info: dict, parts: list[dict]) -> str:
             if is_json_like(text):
                 content_parts.append(_macros.user_content(format_json(text)))
             else:
-                content_parts.append(_macros.user_content(render_markdown_text(text)))
+                content_parts.append(_macros.user_content(render_user_text(text)))
         elif part_type == "file":
             content_parts.append(render_file_part(part))
         # Other part types for user messages are rare
