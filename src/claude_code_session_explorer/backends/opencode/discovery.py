@@ -227,11 +227,12 @@ def get_session_id_from_file_path(path: Path, storage_dir: Path) -> str | None:
     Message files: storage/message/{sessionID}/{messageID}.json
     Part files: storage/part/{messageID}/{partID}.json
 
-    For part files, we need to look up which session the message belongs to.
+    For part files, the sessionID is stored inside the file itself,
+    so we read it directly (O(1)) rather than scanning all sessions.
 
     Args:
         path: Path to the changed file.
-        storage_dir: Base storage directory.
+        storage_dir: Base storage directory (unused for part files but kept for API).
 
     Returns:
         Session ID, or None if it cannot be determined.
@@ -245,18 +246,10 @@ def get_session_id_from_file_path(path: Path, storage_dir: Path) -> str | None:
                 return parts[msg_idx + 1]
         elif "part" in parts:
             # part/{messageID}/{partID}.json
-            # We need to find which session this message belongs to
-            part_idx = parts.index("part")
-            if len(parts) > part_idx + 1:
-                message_id = parts[part_idx + 1]
-                # Scan message directories to find which session has this message
-                msg_base = storage_dir / "message"
-                if msg_base.exists():
-                    for session_dir in msg_base.iterdir():
-                        if session_dir.is_dir():
-                            msg_file = session_dir / f"{message_id}.json"
-                            if msg_file.exists():
-                                return session_dir.name
-    except (ValueError, IndexError):
+            # Part files contain sessionID directly - just read it
+            if path.exists():
+                data = json.loads(path.read_text())
+                return data.get("sessionID")
+    except (ValueError, IndexError, json.JSONDecodeError, OSError):
         pass
     return None

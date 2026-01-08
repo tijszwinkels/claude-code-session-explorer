@@ -65,6 +65,8 @@ def opencode_session(opencode_storage_dir):
     user_part_dir.mkdir(parents=True)
     user_part = {
         "id": "prt_user1",
+        "sessionID": session_id,
+        "messageID": user_msg_id,
         "type": "text",
         "text": "Hello, how are you?",
     }
@@ -90,6 +92,8 @@ def opencode_session(opencode_storage_dir):
     # Text part
     text_part = {
         "id": "prt_text1",
+        "sessionID": session_id,
+        "messageID": asst_msg_id,
         "type": "text",
         "text": "I'm doing well, thank you!",
     }
@@ -98,6 +102,8 @@ def opencode_session(opencode_storage_dir):
     # Tool part
     tool_part = {
         "id": "prt_tool1",
+        "sessionID": session_id,
+        "messageID": asst_msg_id,
         "type": "tool",
         "tool": "bash",
         "callID": "toolu_123",
@@ -113,6 +119,8 @@ def opencode_session(opencode_storage_dir):
     # Step-finish part (required for read_new_lines to emit assistant messages)
     step_finish_part = {
         "id": "prt_zfinish",  # 'z' prefix to sort last
+        "sessionID": session_id,
+        "messageID": asst_msg_id,
         "type": "step-finish",
     }
     (asst_part_dir / "prt_zfinish.json").write_text(json.dumps(step_finish_part))
@@ -223,6 +231,42 @@ class TestOpenCodeDiscovery:
 
         session_file = opencode_storage_dir / "session" / "proj" / "ses_123.json"
         assert should_watch_file(session_file) is False
+
+    def test_get_session_id_from_part_file(self, opencode_session):
+        """Test extracting session ID from a part file by reading its contents."""
+        from claude_code_session_explorer.backends.opencode.discovery import (
+            get_session_id_from_file_path,
+        )
+
+        storage_dir = opencode_session["storage_dir"]
+        session_id = opencode_session["session_id"]
+
+        # Find a part file from the fixture
+        part_dir = storage_dir / "part"
+        part_files = list(part_dir.rglob("*.json"))
+        assert len(part_files) > 0, "Fixture should have part files"
+
+        # The part file should contain sessionID inside it
+        result = get_session_id_from_file_path(part_files[0], storage_dir)
+        assert result == session_id
+
+    def test_get_session_id_from_message_file(self, opencode_session):
+        """Test extracting session ID from a message file path."""
+        from claude_code_session_explorer.backends.opencode.discovery import (
+            get_session_id_from_file_path,
+        )
+
+        storage_dir = opencode_session["storage_dir"]
+        session_id = opencode_session["session_id"]
+
+        # Find a message file
+        msg_dir = storage_dir / "message" / session_id
+        msg_files = list(msg_dir.glob("*.json"))
+        assert len(msg_files) > 0, "Fixture should have message files"
+
+        # Session ID should be extracted from the path
+        result = get_session_id_from_file_path(msg_files[0], storage_dir)
+        assert result == session_id
 
 
 class TestOpenCodeTailer:
