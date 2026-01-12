@@ -286,16 +286,40 @@ async def broadcast_session_status(session_id: str) -> None:
     )
 
 
-def _attach_pending_process(info: SessionInfo) -> None:
+async def _monitor_attached_process(info: SessionInfo) -> None:
+    """Monitor an attached process and clean up when it exits.
+
+    This is called as a background task after attaching a pending process
+    to a new session. It waits for the process to complete, then clears
+    the process reference and broadcasts the updated status.
+    """
+    if info.process is None:
+        return
+
+    try:
+        # Wait for process to complete
+        await info.process.wait()
+        logger.debug(f"Attached process completed for session {info.session_id}")
+    except Exception as e:
+        logger.error(f"Error monitoring attached process for {info.session_id}: {e}")
+    finally:
+        info.process = None
+        await broadcast_session_status(info.session_id)
+
+
+def _attach_pending_process(info: SessionInfo) -> bool:
     """Attach a pending process to a newly discovered session.
 
     When a new session is created via /sessions/new, we store the process
     in _pending_new_session_processes keyed by cwd. When the session file
     appears and we add it, we check if there's a matching pending process
     and attach it so the stop button works.
+
+    Returns:
+        True if a process was attached, False otherwise.
     """
     if not info.project_path:
-        return
+        return False
 
     # Try to match by project path
     project_path_key = str(Path(info.project_path).resolve())
@@ -306,8 +330,11 @@ def _attach_pending_process(info: SessionInfo) -> None:
         if proc.returncode is None:
             info.process = proc
             logger.info(f"Attached pending process to session {info.session_id}")
+            return True
         else:
             logger.debug(f"Pending process already exited for {info.session_id}")
+
+    return False
 
 
 async def run_cli_for_session(
@@ -427,12 +454,14 @@ async def check_for_new_sessions() -> None:
                         await broadcast_session_removed(evicted_id)
                     if info:
                         # Check if there's a pending process for this session's project path
-                        _attach_pending_process(info)
+                        attached = _attach_pending_process(info)
                         await broadcast_session_added(info)
                         await broadcast_session_catchup(info)
-                        # If we attached a process, broadcast status so UI shows stop button
-                        if info.process is not None:
+                        # If we attached a process, broadcast status and start monitoring
+                        if attached:
                             await broadcast_session_status(info.session_id)
+                            # Monitor process completion in background
+                            asyncio.create_task(_monitor_attached_process(info))
     except Exception as e:
         logger.warning(f"Failed to check for new sessions: {e}")
 
