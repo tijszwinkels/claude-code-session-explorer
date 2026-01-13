@@ -1162,11 +1162,15 @@ async def get_file(path: str) -> FileResponse:
         language = "dockerfile"
 
     try:
-        # Read file content
-        content = file_path.read_text(encoding="utf-8", errors="replace")
+        # Read file content - only read up to MAX_FILE_SIZE bytes to prevent
+        # memory exhaustion on large files
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read(MAX_FILE_SIZE + 1)  # Read one extra to detect truncation
 
-        if truncated:
+        # If we read more than MAX_FILE_SIZE, file is truncated
+        if len(content) > MAX_FILE_SIZE:
             content = content[:MAX_FILE_SIZE]
+            truncated = True
 
         # Check for binary content (null bytes indicate binary)
         if "\x00" in content[:8192]:
