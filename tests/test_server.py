@@ -403,6 +403,134 @@ class TestBackendsEndpoint:
         assert isinstance(data["models"], list)
 
 
+class TestFilePreviewAPI:
+    """Tests for the file preview API endpoint."""
+
+    def test_get_file_success(self, tmp_path):
+        """Test successful file fetch."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("print('hello')")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={test_file}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "print('hello')"
+        assert data["filename"] == "test.py"
+        assert data["language"] == "python"
+        assert data["truncated"] is False
+        assert data["size"] == 14  # len("print('hello')")
+
+    def test_get_file_not_found(self):
+        """Test 404 for missing file."""
+        client = TestClient(app)
+        response = client.get("/api/file?path=/nonexistent/file.py")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_get_file_directory_rejected(self, tmp_path):
+        """Test that directories are rejected."""
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={tmp_path}")
+
+        assert response.status_code == 400
+        assert "not a file" in response.json()["detail"].lower()
+
+    def test_get_file_binary_rejected(self, tmp_path):
+        """Test binary file rejection."""
+        binary_file = tmp_path / "image.png"
+        binary_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={binary_file}")
+
+        assert response.status_code == 400
+        assert "binary" in response.json()["detail"].lower()
+
+    def test_get_file_truncation(self, tmp_path):
+        """Test large file truncation."""
+        large_file = tmp_path / "large.txt"
+        # Write slightly more than 1MB
+        large_file.write_text("x" * (1024 * 1024 + 1000))
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={large_file}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["truncated"] is True
+        assert len(data["content"]) == 1024 * 1024
+
+    def test_get_file_language_detection(self, tmp_path):
+        """Test language detection from extensions."""
+        test_cases = [
+            (".py", "python"),
+            (".js", "javascript"),
+            (".ts", "typescript"),
+            (".rs", "rust"),
+            (".go", "go"),
+            (".json", "json"),
+            (".md", "markdown"),
+            (".yaml", "yaml"),
+        ]
+
+        client = TestClient(app)
+        for ext, expected_lang in test_cases:
+            test_file = tmp_path / f"test{ext}"
+            test_file.write_text("// code")
+
+            response = client.get(f"/api/file?path={test_file}")
+            assert response.status_code == 200
+            assert response.json()["language"] == expected_lang, f"Failed for {ext}"
+
+    def test_get_file_unknown_extension(self, tmp_path):
+        """Test unknown extension returns null language."""
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("some content")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={test_file}")
+
+        assert response.status_code == 200
+        assert response.json()["language"] is None
+
+    def test_get_file_makefile(self, tmp_path):
+        """Test Makefile detection without extension."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("all:\n\techo hello")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={makefile}")
+
+        assert response.status_code == 200
+        assert response.json()["language"] == "makefile"
+
+    def test_get_file_dockerfile(self, tmp_path):
+        """Test Dockerfile detection without extension."""
+        dockerfile = tmp_path / "Dockerfile"
+        dockerfile.write_text("FROM python:3.11")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={dockerfile}")
+
+        assert response.status_code == 200
+        assert response.json()["language"] == "dockerfile"
+
+    def test_get_file_absolute_path_returned(self, tmp_path):
+        """Test that absolute path is returned."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("content")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={test_file}")
+
+        assert response.status_code == 200
+        # Path should be absolute
+        assert response.json()["path"].startswith("/")
+
+
 # Note: SSE endpoint streaming tests are skipped because TestClient
 # doesn't handle SSE event generators well. The endpoint is tested
 # manually and through integration tests.

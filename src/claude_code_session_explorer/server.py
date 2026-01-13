@@ -215,6 +215,61 @@ class SendMessageRequest(BaseModel):
     message: str
 
 
+class FileResponse(BaseModel):
+    """Response for file preview endpoint."""
+
+    content: str
+    path: str
+    filename: str
+    size: int
+    language: str | None
+    truncated: bool = False
+
+
+# File extension to highlight.js language mapping
+EXTENSION_TO_LANGUAGE = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".jsx": "javascript",
+    ".json": "json",
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".scss": "scss",
+    ".less": "less",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+    ".xml": "xml",
+    ".sql": "sql",
+    ".sh": "bash",
+    ".bash": "bash",
+    ".zsh": "bash",
+    ".rs": "rust",
+    ".go": "go",
+    ".java": "java",
+    ".c": "c",
+    ".cpp": "cpp",
+    ".h": "c",
+    ".hpp": "cpp",
+    ".rb": "ruby",
+    ".php": "php",
+    ".swift": "swift",
+    ".kt": "kotlin",
+    ".r": "r",
+    ".lua": "lua",
+    ".pl": "perl",
+    ".gitignore": "plaintext",
+    ".env": "plaintext",
+}
+
+MAX_FILE_SIZE = 1024 * 1024  # 1MB
+
+
 class NewSessionRequest(BaseModel):
     """Request body for starting a new session."""
 
@@ -1049,3 +1104,76 @@ async def create_new_session(request: NewSessionRequest) -> dict:
     except Exception as e:
         logger.error(f"Error starting new session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/file")
+async def get_file(path: str) -> FileResponse:
+    """Fetch file contents for preview.
+
+    Args:
+        path: Absolute path to the file to preview.
+
+    Returns:
+        FileResponse with content, metadata, and language detection.
+
+    Raises:
+        HTTPException: 404 if file not found, 400 if binary or not a file,
+                      403 if permission denied, 500 for other errors.
+    """
+    file_path = Path(path)
+
+    # Validate path exists
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    # Ensure it's a file, not directory
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail=f"Not a file: {path}")
+
+    # Check file size
+    try:
+        file_size = file_path.stat().st_size
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Cannot stat file: {e}")
+
+    truncated = file_size > MAX_FILE_SIZE
+
+    # Detect language from extension
+    extension = file_path.suffix.lower()
+    language = EXTENSION_TO_LANGUAGE.get(extension)
+
+    # Special case: Makefile, Dockerfile without extension
+    if file_path.name.lower() == "makefile":
+        language = "makefile"
+    elif file_path.name.lower() == "dockerfile":
+        language = "dockerfile"
+
+    try:
+        # Read file content
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+
+        if truncated:
+            content = content[:MAX_FILE_SIZE]
+
+        # Check for binary content (null bytes indicate binary)
+        if "\x00" in content[:8192]:
+            raise HTTPException(status_code=400, detail="Binary file cannot be displayed")
+
+        return FileResponse(
+            content=content,
+            path=str(file_path.absolute()),
+            filename=file_path.name,
+            size=file_size,
+            language=language,
+            truncated=truncated,
+        )
+
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Binary file cannot be displayed")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {path}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading file {path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
