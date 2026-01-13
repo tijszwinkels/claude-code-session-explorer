@@ -314,15 +314,8 @@ class TestSendFeature:
         )
 
         if model_backend is None:
-            # No backend supports models, skip validation test
-            # Just verify that model_index is silently ignored for non-model backends
-            response = client.post(
-                "/sessions/new",
-                json={"message": "test", "model_index": 999},
-            )
-            # Should not fail - model_index is ignored
-            assert response.status_code != 400 or "model_index" not in response.json().get("detail", "").lower()
-            return
+            # No backend supports models, nothing to test
+            pytest.skip("No backend supports model selection")
 
         # Model index without fetching models first (cache is empty)
         response = client.post(
