@@ -65,6 +65,10 @@
                 <span class="preview-path" id="preview-path"></span>
             </div>
             <div class="preview-actions">
+                <label class="preview-view-toggle" id="preview-view-toggle" style="display: none;" title="Toggle between rendered and source view">
+                    <input type="checkbox" id="preview-view-checkbox" checked>
+                    <span class="toggle-label">Rendered</span>
+                </label>
                 <button class="preview-copy-btn" id="preview-copy-btn" title="Copy file path">Copy Path</button>
                 <button class="preview-close-btn" id="preview-close-btn" title="Close preview">&times;</button>
             </div>
@@ -176,6 +180,8 @@
         const previewCloseBtn = document.getElementById('preview-close-btn');
         const previewCopyBtn = document.getElementById('preview-copy-btn');
         const previewResizeHandle = document.getElementById('preview-resize-handle');
+        const previewViewToggle = document.getElementById('preview-view-toggle');
+        const previewViewCheckbox = document.getElementById('preview-view-checkbox');
         const floatingControls = document.getElementById('floating-controls');
         const messageInput = document.getElementById('message-input');
         const inputStatus = document.getElementById('input-status');
@@ -224,6 +230,7 @@
         let previewPaneOpen = false;
         let previewPaneWidth = parseInt(localStorage.getItem('previewPaneWidth')) || 400;  // default 400px
         let previewFilePath = null;
+        let previewFileData = null;  // Store current file data for view toggle
         let autoSwitch = localStorage.getItem('autoSwitch') !== 'false';    // default on
         let autoScroll = localStorage.getItem('autoScroll') !== 'false';    // default on
         let sortBy = localStorage.getItem('sortBy') || 'modified';          // default: modified
@@ -382,11 +389,13 @@
 
         async function openPreviewPane(filePath) {
             previewFilePath = filePath;
+            previewFileData = null;
             const filename = filePath.split('/').pop();
 
             previewFilename.textContent = filename;
             previewPath.textContent = filePath;
             previewContent.innerHTML = '';
+            previewViewToggle.style.display = 'none';  // Hide toggle until we know if it's markdown
             showPreviewStatus('loading', 'Loading...');
 
             // Open the pane
@@ -405,8 +414,18 @@
                     return;
                 }
 
+                // Store data for view toggle
+                previewFileData = data;
+
+                // Show toggle for markdown files
+                if (data.rendered_html) {
+                    previewViewToggle.style.display = '';
+                    previewViewCheckbox.checked = true;
+                    updateViewToggleLabel();
+                }
+
                 // Render content with syntax highlighting
-                renderPreviewContent(data);
+                renderPreviewContent(data, previewViewCheckbox.checked);
 
                 if (data.truncated) {
                     showPreviewStatus('warning', 'File truncated (showing first 1MB)');
@@ -418,7 +437,26 @@
             }
         }
 
-        function renderPreviewContent(data) {
+        function renderPreviewContent(data, showRendered = true) {
+            previewContent.innerHTML = '';
+
+            // If we have pre-rendered HTML (markdown) and showRendered is true, display that
+            if (data.rendered_html && showRendered) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'markdown-preview';
+                wrapper.innerHTML = data.rendered_html;
+                previewContent.appendChild(wrapper);
+
+                // Apply highlight.js to any code blocks in the markdown
+                if (window.hljs) {
+                    wrapper.querySelectorAll('pre code').forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                }
+                return;
+            }
+
+            // Otherwise render as code with syntax highlighting
             const pre = document.createElement('pre');
             const code = document.createElement('code');
 
@@ -429,7 +467,6 @@
 
             code.textContent = data.content;
             pre.appendChild(code);
-            previewContent.innerHTML = '';
             previewContent.appendChild(pre);
 
             // Apply highlight.js if available
@@ -465,6 +502,19 @@
                 const originalText = previewCopyBtn.textContent;
                 previewCopyBtn.textContent = 'Copied!';
                 setTimeout(() => previewCopyBtn.textContent = originalText, 1500);
+            }
+        });
+
+        // View toggle for markdown files
+        function updateViewToggleLabel() {
+            const label = previewViewToggle.querySelector('.toggle-label');
+            label.textContent = previewViewCheckbox.checked ? 'Rendered' : 'Source';
+        }
+
+        previewViewCheckbox.addEventListener('change', function() {
+            updateViewToggleLabel();
+            if (previewFileData) {
+                renderPreviewContent(previewFileData, previewViewCheckbox.checked);
             }
         });
 

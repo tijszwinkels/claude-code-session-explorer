@@ -224,6 +224,7 @@ class FileResponse(BaseModel):
     size: int
     language: str | None
     truncated: bool = False
+    rendered_html: str | None = None  # For markdown files: pre-rendered HTML
 
 
 # File extension to highlight.js language mapping
@@ -1159,6 +1160,13 @@ async def get_file(path: str) -> FileResponse:
         if "\x00" in content[:8192]:
             raise HTTPException(status_code=400, detail="Binary file cannot be displayed")
 
+        # Render markdown to HTML if it's a markdown file
+        rendered_html = None
+        if language == "markdown":
+            from .backends.shared.rendering import render_markdown_text
+
+            rendered_html = render_markdown_text(content)
+
         return FileResponse(
             content=content,
             path=str(file_path.absolute()),
@@ -1166,6 +1174,7 @@ async def get_file(path: str) -> FileResponse:
             size=file_size,
             language=language,
             truncated=truncated,
+            rendered_html=rendered_html,
         )
 
     except UnicodeDecodeError:

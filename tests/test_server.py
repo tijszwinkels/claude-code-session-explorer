@@ -530,6 +530,46 @@ class TestFilePreviewAPI:
         # Path should be absolute
         assert response.json()["path"].startswith("/")
 
+    def test_get_file_markdown_rendering(self, tmp_path):
+        """Test markdown files return rendered HTML."""
+        md_file = tmp_path / "test.md"
+        md_content = """# Hello World
+
+This is a **bold** paragraph.
+
+| Column A | Column B |
+|----------|----------|
+| Value 1  | Value 2  |
+"""
+        md_file.write_text(md_content)
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={md_file}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["language"] == "markdown"
+        assert data["content"] == md_content  # Raw content still returned
+        assert data["rendered_html"] is not None
+        # Check rendered HTML contains expected elements
+        assert "<h1>" in data["rendered_html"]
+        assert "<strong>bold</strong>" in data["rendered_html"]
+        assert "<table>" in data["rendered_html"]
+        assert "<th>" in data["rendered_html"]
+
+    def test_get_file_non_markdown_no_rendered_html(self, tmp_path):
+        """Test non-markdown files don't have rendered_html."""
+        py_file = tmp_path / "test.py"
+        py_file.write_text("print('hello')")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file?path={py_file}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["language"] == "python"
+        assert data["rendered_html"] is None
+
 
 # Note: SSE endpoint streaming tests are skipped because TestClient
 # doesn't handle SSE event generators well. The endpoint is tested
