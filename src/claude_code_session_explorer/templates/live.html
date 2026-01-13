@@ -231,6 +231,7 @@
         let previewPaneWidth = parseInt(localStorage.getItem('previewPaneWidth')) || 400;  // default 400px
         let previewFilePath = null;
         let previewFileData = null;  // Store current file data for view toggle
+        const sessionPreviewPaths = new Map();  // session_id -> file path (track open preview per session)
         let autoSwitch = localStorage.getItem('autoSwitch') !== 'false';    // default on
         let autoScroll = localStorage.getItem('autoScroll') !== 'false';    // default on
         let sortBy = localStorage.getItem('sortBy') || 'modified';          // default: modified
@@ -392,6 +393,11 @@
             previewFileData = null;
             const filename = filePath.split('/').pop();
 
+            // Track this preview for the current session
+            if (activeSessionId) {
+                sessionPreviewPaths.set(activeSessionId, filePath);
+            }
+
             previewFilename.textContent = filename;
             previewPath.textContent = filePath;
             previewContent.innerHTML = '';
@@ -475,13 +481,19 @@
             }
         }
 
-        function closePreviewPane() {
+        function closePreviewPane(clearSessionAssociation = true) {
             previewPane.classList.remove('open');
             mainContent.classList.remove('preview-open');
             inputBar.classList.remove('preview-open');
             floatingControls.classList.remove('preview-open');
             previewPaneOpen = false;
             previewFilePath = null;
+            previewFileData = null;
+
+            // Clear session association if requested (not when switching sessions)
+            if (clearSessionAssociation && activeSessionId) {
+                sessionPreviewPaths.delete(activeSessionId);
+            }
         }
 
         function showPreviewStatus(type, message) {
@@ -1946,6 +1958,11 @@
             const session = sessions.get(sessionId);
             if (!session) return;
 
+            // Close current preview without clearing session association
+            if (previewPaneOpen) {
+                closePreviewPane(false);
+            }
+
             // Update containers
             sessions.forEach(function(s) {
                 s.container.classList.remove('active');
@@ -1981,6 +1998,12 @@
             }
 
             updateInputBarUI();
+
+            // Restore preview for this session if one was open
+            const savedPreviewPath = sessionPreviewPaths.get(sessionId);
+            if (savedPreviewPath) {
+                openPreviewPane(savedPreviewPath);
+            }
 
             if (scrollToBottom) {
                 requestAnimationFrame(function() {
