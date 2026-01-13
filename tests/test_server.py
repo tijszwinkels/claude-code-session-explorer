@@ -1,12 +1,27 @@
 """Tests for the FastAPI server."""
 
 import json
+import tempfile
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
 from claude_code_session_explorer import server, sessions
 from claude_code_session_explorer.server import app
 from claude_code_session_explorer.sessions import add_session
+
+
+@pytest.fixture
+def home_tmp_path():
+    """Create a temporary directory within the user's home directory.
+
+    This is needed for file preview tests since the API restricts access
+    to files within the home directory only.
+    """
+    home = Path.home()
+    with tempfile.TemporaryDirectory(dir=home, prefix=".test_") as tmpdir:
+        yield Path(tmpdir)
 
 
 @pytest.fixture(autouse=True)
@@ -406,9 +421,9 @@ class TestBackendsEndpoint:
 class TestFilePreviewAPI:
     """Tests for the file preview API endpoint."""
 
-    def test_get_file_success(self, tmp_path):
+    def test_get_file_success(self, home_tmp_path):
         """Test successful file fetch."""
-        test_file = tmp_path / "test.py"
+        test_file = home_tmp_path / "test.py"
         test_file.write_text("print('hello')")
 
         client = TestClient(app)
@@ -422,25 +437,26 @@ class TestFilePreviewAPI:
         assert data["truncated"] is False
         assert data["size"] == 14  # len("print('hello')")
 
-    def test_get_file_not_found(self):
-        """Test 404 for missing file."""
+    def test_get_file_not_found(self, home_tmp_path):
+        """Test 404 for missing file in home directory."""
         client = TestClient(app)
-        response = client.get("/api/file?path=/nonexistent/file.py")
+        # Use a path within home directory that doesn't exist
+        response = client.get(f"/api/file?path={home_tmp_path}/nonexistent.py")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    def test_get_file_directory_rejected(self, tmp_path):
+    def test_get_file_directory_rejected(self, home_tmp_path):
         """Test that directories are rejected."""
         client = TestClient(app)
-        response = client.get(f"/api/file?path={tmp_path}")
+        response = client.get(f"/api/file?path={home_tmp_path}")
 
         assert response.status_code == 400
         assert "not a file" in response.json()["detail"].lower()
 
-    def test_get_file_binary_rejected(self, tmp_path):
+    def test_get_file_binary_rejected(self, home_tmp_path):
         """Test binary file rejection."""
-        binary_file = tmp_path / "image.png"
+        binary_file = home_tmp_path / "image.png"
         binary_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00")
 
         client = TestClient(app)
@@ -449,9 +465,9 @@ class TestFilePreviewAPI:
         assert response.status_code == 400
         assert "binary" in response.json()["detail"].lower()
 
-    def test_get_file_truncation(self, tmp_path):
+    def test_get_file_truncation(self, home_tmp_path):
         """Test large file truncation."""
-        large_file = tmp_path / "large.txt"
+        large_file = home_tmp_path / "large.txt"
         # Write slightly more than 1MB
         large_file.write_text("x" * (1024 * 1024 + 1000))
 
@@ -463,7 +479,7 @@ class TestFilePreviewAPI:
         assert data["truncated"] is True
         assert len(data["content"]) == 1024 * 1024
 
-    def test_get_file_language_detection(self, tmp_path):
+    def test_get_file_language_detection(self, home_tmp_path):
         """Test language detection from extensions."""
         test_cases = [
             (".py", "python"),
@@ -478,16 +494,16 @@ class TestFilePreviewAPI:
 
         client = TestClient(app)
         for ext, expected_lang in test_cases:
-            test_file = tmp_path / f"test{ext}"
+            test_file = home_tmp_path / f"test{ext}"
             test_file.write_text("// code")
 
             response = client.get(f"/api/file?path={test_file}")
             assert response.status_code == 200
             assert response.json()["language"] == expected_lang, f"Failed for {ext}"
 
-    def test_get_file_unknown_extension(self, tmp_path):
+    def test_get_file_unknown_extension(self, home_tmp_path):
         """Test unknown extension returns null language."""
-        test_file = tmp_path / "test.xyz"
+        test_file = home_tmp_path / "test.xyz"
         test_file.write_text("some content")
 
         client = TestClient(app)
@@ -496,9 +512,9 @@ class TestFilePreviewAPI:
         assert response.status_code == 200
         assert response.json()["language"] is None
 
-    def test_get_file_makefile(self, tmp_path):
+    def test_get_file_makefile(self, home_tmp_path):
         """Test Makefile detection without extension."""
-        makefile = tmp_path / "Makefile"
+        makefile = home_tmp_path / "Makefile"
         makefile.write_text("all:\n\techo hello")
 
         client = TestClient(app)
@@ -507,9 +523,9 @@ class TestFilePreviewAPI:
         assert response.status_code == 200
         assert response.json()["language"] == "makefile"
 
-    def test_get_file_dockerfile(self, tmp_path):
+    def test_get_file_dockerfile(self, home_tmp_path):
         """Test Dockerfile detection without extension."""
-        dockerfile = tmp_path / "Dockerfile"
+        dockerfile = home_tmp_path / "Dockerfile"
         dockerfile.write_text("FROM python:3.11")
 
         client = TestClient(app)
@@ -518,9 +534,9 @@ class TestFilePreviewAPI:
         assert response.status_code == 200
         assert response.json()["language"] == "dockerfile"
 
-    def test_get_file_absolute_path_returned(self, tmp_path):
+    def test_get_file_absolute_path_returned(self, home_tmp_path):
         """Test that absolute path is returned."""
-        test_file = tmp_path / "test.txt"
+        test_file = home_tmp_path / "test.txt"
         test_file.write_text("content")
 
         client = TestClient(app)
@@ -530,9 +546,9 @@ class TestFilePreviewAPI:
         # Path should be absolute
         assert response.json()["path"].startswith("/")
 
-    def test_get_file_markdown_rendering(self, tmp_path):
+    def test_get_file_markdown_rendering(self, home_tmp_path):
         """Test markdown files return rendered HTML."""
-        md_file = tmp_path / "test.md"
+        md_file = home_tmp_path / "test.md"
         md_content = """# Hello World
 
 This is a **bold** paragraph.
@@ -557,9 +573,9 @@ This is a **bold** paragraph.
         assert "<table>" in data["rendered_html"]
         assert "<th>" in data["rendered_html"]
 
-    def test_get_file_non_markdown_no_rendered_html(self, tmp_path):
+    def test_get_file_non_markdown_no_rendered_html(self, home_tmp_path):
         """Test non-markdown files don't have rendered_html."""
-        py_file = tmp_path / "test.py"
+        py_file = home_tmp_path / "test.py"
         py_file.write_text("print('hello')")
 
         client = TestClient(app)
@@ -569,6 +585,20 @@ This is a **bold** paragraph.
         data = response.json()
         assert data["language"] == "python"
         assert data["rendered_html"] is None
+
+    def test_get_file_path_traversal_blocked(self):
+        """Test that path traversal outside home directory is blocked."""
+        client = TestClient(app)
+
+        # Try to access system files outside home directory
+        response = client.get("/api/file?path=/etc/passwd")
+        assert response.status_code == 403
+        assert "home directory" in response.json()["detail"]
+
+        # Try with path traversal
+        response = client.get("/api/file?path=/home/../etc/passwd")
+        assert response.status_code == 403
+        assert "home directory" in response.json()["detail"]
 
 
 # Note: SSE endpoint streaming tests are skipped because TestClient

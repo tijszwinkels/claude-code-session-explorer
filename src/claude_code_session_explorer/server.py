@@ -1123,6 +1123,18 @@ async def get_file(path: str) -> FileResponse:
     """
     file_path = Path(path)
 
+    # Security: Restrict to user's home directory to prevent path traversal
+    home_dir = Path.home()
+    try:
+        resolved_path = file_path.resolve()
+        # Check if resolved path is within home directory
+        resolved_path.relative_to(home_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: path must be within home directory ({home_dir})",
+        )
+
     # Validate path exists
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
