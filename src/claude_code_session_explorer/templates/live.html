@@ -510,7 +510,7 @@
 
         previewCopyBtn.addEventListener('click', function() {
             if (previewFilePath) {
-                navigator.clipboard.writeText(previewFilePath);
+                copyToClipboard(previewFilePath, null);
                 const originalText = previewCopyBtn.textContent;
                 previewCopyBtn.textContent = 'Copied!';
                 setTimeout(() => previewCopyBtn.textContent = originalText, 1500);
@@ -2018,8 +2018,16 @@
 
             const status = sessionStatus.get(sessionId);
             const isWaiting = status && status.waiting_for_input;
+            const isRunning = status && status.running;
             const hasUnread = session.sidebarItem.classList.contains('unread') ||
                               session.sidebarItem.classList.contains('waiting');
+
+            // Update running spinner
+            if (isRunning) {
+                session.sidebarItem.classList.add('running');
+            } else {
+                session.sidebarItem.classList.remove('running');
+            }
 
             // Update session item: waiting takes precedence over unread
             if (hasUnread && isWaiting) {
