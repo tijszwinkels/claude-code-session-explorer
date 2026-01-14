@@ -105,6 +105,12 @@ def main() -> None:
     is_flag=True,
     help="Include subagent sessions in the session list",
 )
+@click.option(
+    "--disable-thinking",
+    is_flag=True,
+    hidden=True,
+    help="Disable thinking level detection (don't set MAX_THINKING_TOKENS)",
+)
 def serve(
     session: Path | None,
     port: int,
@@ -119,6 +125,7 @@ def serve(
     fork: bool,
     default_send_backend: str | None,
     include_subagents: bool,
+    disable_thinking: bool,
 ) -> None:
     """Start the live-updating transcript viewer server.
 
@@ -186,6 +193,7 @@ def serve(
     server.set_skip_permissions(dangerously_skip_permissions)
     server.set_fork_enabled(fork)
     server.set_include_subagents(include_subagents)
+    server.set_disable_thinking(disable_thinking)
     if default_send_backend:
         server.set_default_send_backend(default_send_backend)
 
