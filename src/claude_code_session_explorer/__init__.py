@@ -10,10 +10,46 @@ from click_default_group import DefaultGroup
 import uvicorn
 
 from .backends import list_backends, get_multi_backend
+from .config import load_config, Config, DEFAULT_CONFIG
 
 __version__ = "0.1.0"
 
 logger = logging.getLogger(__name__)
+
+# Global config, set by --config option
+_config: Config | None = None
+
+
+def _get_config() -> Config:
+    """Get the current config, or defaults if none loaded."""
+    if _config is None:
+        return Config.from_dict(DEFAULT_CONFIG)
+    return _config
+
+
+def _coalesce(cli_value, config_value, default=None):
+    """Return first non-None value: CLI arg > config > default."""
+    if cli_value is not None:
+        return cli_value
+    if config_value is not None:
+        return config_value
+    return default
+
+
+_config_option = click.option(
+    "--config", "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="Load configuration from TOML file (see config.example.toml)",
+)
+
+
+def _load_config_file(config_file: Path | None) -> None:
+    """Load config file if specified."""
+    global _config
+    if config_file:
+        _config = load_config(config_paths=[config_file])
+        click.echo(f"Loaded config: {config_file}")
 
 
 @click.group(cls=DefaultGroup, default="serve", default_if_no_args=True)
@@ -23,11 +59,14 @@ def main() -> None:
 
     When run without a subcommand, starts the live-updating transcript viewer server.
     Use 'html' or 'md' subcommands to export transcripts to static files.
+
+    Use --config to load settings from a TOML file. See config.example.toml for options.
     """
     pass
 
 
 @main.command()
+@_config_option
 @click.option(
     "--session",
     "-s",
@@ -38,58 +77,64 @@ def main() -> None:
     "--port",
     "-p",
     type=int,
-    default=8765,
+    default=None,
     help="Port to run the server on (default: 8765)",
 )
 @click.option(
     "--host",
     type=str,
-    default="127.0.0.1",
+    default=None,
     help="Host to bind to (default: 127.0.0.1)",
 )
 @click.option(
     "--no-open",
     is_flag=True,
+    default=None,
     help="Don't open browser automatically",
 )
 @click.option(
     "--debug",
     is_flag=True,
+    default=None,
     help="Enable debug logging",
 )
 @click.option(
     "--max-sessions",
     type=int,
-    default=100,
+    default=None,
     help="Maximum number of sessions to track (default: 100)",
 )
 @click.option(
     "--backend",
     type=click.Choice(["all"] + list_backends()),
-    default="all",
+    default=None,
     help="Backend to use: 'all' for all backends (default), or a specific backend name",
 )
 @click.option(
     "--experimental",
     is_flag=True,
+    default=None,
     hidden=True,
     help="Enable experimental features (required for --enable-send)",
 )
 @click.option(
     "--enable-send",
     is_flag=True,
+    default=None,
     hidden=True,
     help="Enable sending messages to Claude Code sessions (requires --experimental)",
 )
 @click.option(
     "--dangerously-skip-permissions",
     is_flag=True,
+    default=None,
     hidden=True,
     help="Pass --dangerously-skip-permissions to Claude CLI (requires --experimental --enable-send)",
 )
 @click.option(
     "--fork",
     is_flag=True,
+    default=None,
     hidden=True,
     help="Enable fork button to create new sessions from messages (requires --experimental --enable-send)",
 )
@@ -103,29 +148,32 @@ def main() -> None:
 @click.option(
     "--include-subagents",
     is_flag=True,
+    default=None,
     help="Include subagent sessions in the session list",
 )
 @click.option(
     "--disable-thinking",
     is_flag=True,
+    default=None,
     hidden=True,
     help="Disable thinking level detection (don't set MAX_THINKING_TOKENS)",
 )
 def serve(
+    config_file: Path | None,
     session: Path | None,
-    port: int,
-    host: str,
-    no_open: bool,
-    debug: bool,
-    max_sessions: int,
-    backend: str,
-    experimental: bool,
-    enable_send: bool,
-    dangerously_skip_permissions: bool,
-    fork: bool,
+    port: int | None,
+    host: str | None,
+    no_open: bool | None,
+    debug: bool | None,
+    max_sessions: int | None,
+    backend: str | None,
+    experimental: bool | None,
+    enable_send: bool | None,
+    dangerously_skip_permissions: bool | None,
+    fork: bool | None,
     default_send_backend: str | None,
-    include_subagents: bool,
-    disable_thinking: bool,
+    include_subagents: bool | None,
+    disable_thinking: bool | None,
 ) -> None:
     """Start the live-updating transcript viewer server.
 
@@ -135,6 +183,27 @@ def serve(
     By default, discovers and watches the most recent sessions in
     ~/.claude/projects/. Use --session to add a specific session file.
     """
+    # Load config file if specified
+    _load_config_file(config_file)
+
+    # Load config and merge with CLI args
+    cfg = _get_config().serve
+    port = _coalesce(port, cfg.port, 8765)
+    host = _coalesce(host, cfg.host, "127.0.0.1")
+    no_open = _coalesce(no_open, cfg.no_open, False)
+    debug = _coalesce(debug, cfg.debug, False)
+    max_sessions = _coalesce(max_sessions, cfg.max_sessions, 100)
+    backend = _coalesce(backend, cfg.backend, "all")
+    experimental = _coalesce(experimental, cfg.experimental, False)
+    enable_send = _coalesce(enable_send, cfg.enable_send, False)
+    dangerously_skip_permissions = _coalesce(
+        dangerously_skip_permissions, cfg.dangerously_skip_permissions, False
+    )
+    fork = _coalesce(fork, cfg.fork, False)
+    default_send_backend = _coalesce(default_send_backend, cfg.default_send_backend)
+    include_subagents = _coalesce(include_subagents, cfg.include_subagents, False)
+    disable_thinking = _coalesce(disable_thinking, cfg.disable_thinking, False)
+
     # Configure logging
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
@@ -284,49 +353,57 @@ def resolve_session_path(session_arg: str) -> Path:
 
 
 @main.command()
+@_config_option
 @click.argument("session_file", type=str)
 @click.option(
     "-o",
     "--output",
     type=click.Path(path_type=Path),
+    default=None,
     help="Output directory for HTML files",
 )
 @click.option(
     "-a",
     "--output-auto",
     is_flag=True,
+    default=None,
     help="Auto-name output subdirectory based on session file",
 )
 @click.option(
     "--repo",
     type=str,
+    default=None,
     help="GitHub repo (owner/repo) for commit links. Auto-detected if not specified.",
 )
 @click.option(
     "--gist",
     is_flag=True,
+    default=None,
     help="Upload to GitHub Gist and output a gisthost.github.io URL",
 )
 @click.option(
     "--open",
     "open_browser",
     is_flag=True,
+    default=None,
     help="Open in browser after export",
 )
 @click.option(
     "--json",
     "include_json",
     is_flag=True,
+    default=None,
     help="Include the original session JSON in the output directory",
 )
 def html(
+    config_file: Path | None,
     session_file: str,
     output: Path | None,
-    output_auto: bool,
+    output_auto: bool | None,
     repo: str | None,
-    gist: bool,
-    open_browser: bool,
-    include_json: bool,
+    gist: bool | None,
+    open_browser: bool | None,
+    include_json: bool | None,
 ) -> None:
     """Export a session transcript to static HTML files.
 
@@ -348,6 +425,17 @@ def html(
     )
     import shutil
     import tempfile
+
+    # Load config file if specified
+    _load_config_file(config_file)
+
+    # Load config and merge with CLI args
+    cfg = _get_config().html
+    output_auto = _coalesce(output_auto, cfg.output_auto, False)
+    repo = _coalesce(repo, cfg.repo)
+    gist = _coalesce(gist, cfg.gist, False)
+    open_browser = _coalesce(open_browser, cfg.open, False)
+    include_json = _coalesce(include_json, cfg.include_json, False)
 
     # Resolve session file (can be path or OpenCode session ID)
     session_path = resolve_session_path(session_file)
@@ -397,14 +485,17 @@ def html(
 
 
 @main.command()
+@_config_option
 @click.argument("session_file", type=str)
 @click.option(
     "-o",
     "--output",
     type=click.Path(path_type=Path),
+    default=None,
     help="Output file path. Use trailing slash for auto-named file in directory. Omit for stdout.",
 )
 def md(
+    config_file: Path | None,
     session_file: str,
     output: Path | None,
 ) -> None:
@@ -422,6 +513,9 @@ def md(
     """
     from .export import export_markdown
 
+    # Load config file if specified (md command doesn't use config values currently)
+    _load_config_file(config_file)
+
     # Resolve session file (can be path or OpenCode session ID)
     session_path = resolve_session_path(session_file)
 
@@ -435,6 +529,45 @@ def md(
     except Exception as e:
         click.echo(f"Error generating Markdown: {e}", err=True)
         raise SystemExit(1)
+
+
+@main.command()
+@_config_option
+def config(config_file: Path | None) -> None:
+    """Show current configuration.
+
+    Displays the effective configuration. Use --config to load a config file.
+    """
+    from .config import DEFAULT_CONFIG
+    import dataclasses
+
+    # Load config file if specified
+    _load_config_file(config_file)
+
+    cfg = _get_config()
+    is_default = _config is None
+
+    if is_default:
+        click.echo("No config file loaded (using defaults)")
+        click.echo("Use: claude-code-session-explorer <command> --config <file>")
+    else:
+        click.echo("Config file loaded")
+
+    click.echo("\nEffective configuration:")
+
+    for section_name in ["serve", "html", "md"]:
+        section = getattr(cfg, section_name)
+        click.echo(f"\n[{section_name}]")
+        for field in dataclasses.fields(section):
+            value = getattr(section, field.name)
+            default = DEFAULT_CONFIG.get(section_name, {}).get(field.name)
+            marker = "" if value == default else " (customized)"
+            if value is None:
+                click.echo(f"  {field.name} = <not set>{marker}")
+            elif isinstance(value, str):
+                click.echo(f'  {field.name} = "{value}"{marker}')
+            else:
+                click.echo(f"  {field.name} = {value}{marker}")
 
 
 if __name__ == "__main__":

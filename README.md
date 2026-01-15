@@ -87,6 +87,34 @@ claude-code-session-explorer md ses_xxx -o transcript.md
 - **Gist upload** - Upload to GitHub Gist with gisthost.github.io preview URL
 - **Multi-backend** - Supports both Claude Code (.jsonl) and OpenCode (session IDs)
 
+## Configuration
+
+CLI options can be set in a TOML config file. Use `--config` to load a config file:
+
+```bash
+# Load config and start server
+claude-code-session-explorer --config config.toml
+
+# Show effective configuration
+claude-code-session-explorer --config config.toml config
+```
+
+CLI arguments override config file values. See `config.example.toml` for all options.
+
+Example config:
+
+```toml
+[serve]
+port = 9000
+host = "0.0.0.0"
+no_open = true
+max_sessions = 50
+
+[html]
+gist = true
+repo = "owner/repo"
+```
+
 ## Development
 
 ```bash

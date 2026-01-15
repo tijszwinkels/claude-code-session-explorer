@@ -1,0 +1,36 @@
+# Claude Code Session Explorer Configuration
+#
+# Copy this file to one of these locations:
+#   ~/.config/claude-code-session-explorer/config.toml  (global)
+#   .claude-session-explorer.toml                       (project-local)
+#
+# CLI arguments override config file values.
+# Run `claude-code-session-explorer config` to see effective configuration.
+
+[serve]
+# port = 8765                    # Server port
+# host = "127.0.0.1"             # Bind address (use "0.0.0.0" for network access)
+# no_open = false                # Don't auto-open browser
+# debug = false                  # Enable debug logging
+# max_sessions = 100             # Max sessions to track
+# backend = "all"                # Backend: "all", "claude_code", or "opencode"
+# include_subagents = false      # Include subagent sessions in list
+
+# Experimental features (use with caution)
+# experimental = false           # Enable experimental features
+# enable_send = false            # Allow sending messages to sessions
+# dangerously_skip_permissions = false  # Skip Claude permission prompts
+# fork = false                   # Enable session forking
+# default_send_backend = "claude_code"  # Default backend for new sessions
+# disable_thinking = false       # Disable thinking level detection
+
+[html]
+# output = "/path/to/output"     # Default output directory
+# output_auto = false            # Auto-name output based on session
+# repo = "owner/repo"            # GitHub repo for commit links
+# gist = false                   # Upload to GitHub Gist
+# open = false                   # Open in browser after export
+# include_json = false           # Include original JSON in output
+
+[md]
+# output = "/path/to/output.md"  # Default output file

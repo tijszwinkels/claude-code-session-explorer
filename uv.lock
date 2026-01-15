@@ -108,6 +108,7 @@ dependencies = [
     { name = "markdown" },
     { name = "pyyaml" },
     { name = "sse-starlette" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "uvicorn" },
     { name = "watchfiles" },
 ]
@@ -133,6 +134,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "sse-starlette", specifier = ">=2.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
     { name = "uvicorn", specifier = ">=0.27.0" },
     { name = "watchfiles", specifier = ">=0.21.0" },
 ]
