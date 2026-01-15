@@ -83,12 +83,13 @@ export function connect() {
 
         let mergedPendingId = null;
         const MERGE_WINDOW_MS = 30000;
-        state.sessions.forEach(function(session, sessionId) {
+        for (const [sessionId, session] of state.sessions) {
             if (session.pending && session.starting &&
                 (Date.now() - session.startedAt) < MERGE_WINDOW_MS) {
                 mergedPendingId = sessionId;
+                break;  // Stop after first match
             }
-        });
+        }
 
         if (mergedPendingId) {
             const pendingSession = state.sessions.get(mergedPendingId);
