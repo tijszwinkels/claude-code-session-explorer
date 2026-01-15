@@ -74,6 +74,7 @@ function endTreeResize() {
         if (resizeHandle) resizeHandle.classList.remove('dragging');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+        localStorage.setItem('treeSidebarWidth', state.treeSidebarWidth);
     }
 }
 
@@ -279,7 +280,13 @@ export function openRightPane() {
     dom.inputBar.classList.add('preview-open');
     dom.floatingControls.classList.add('preview-open');
     state.previewPaneOpen = true;
-    
+
+    // Apply persisted tree sidebar width
+    const treeSidebar = document.querySelector('.file-tree-sidebar');
+    if (treeSidebar) {
+        treeSidebar.style.width = state.treeSidebarWidth + 'px';
+    }
+
     if (!dom.fileTreeContent.innerHTML) {
          // Initial load (default to project root if nothing loaded)
          loadFileTree(state.activeSessionId);

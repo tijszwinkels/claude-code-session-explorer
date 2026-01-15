@@ -200,7 +200,7 @@ export const state = {
     isTreeResizing: false,
     treeStartX: 0,
     treeStartWidth: 0,
-    treeSidebarWidth: 250 // Default tree width
+    treeSidebarWidth: parseInt(localStorage.getItem('treeSidebarWidth')) || 250
 };
 
 // Initialize status colors based on URL param
