@@ -2,6 +2,7 @@
 import { dom, state } from './state.js';
 import { isMobile, copyToClipboard } from './utils.js';
 import { openRightPane, syncTreeToFile, loadFileTree } from './filetree.js';
+import { showFlash } from './ui.js';
 
 // Initialize preview pane width
 export function initPreviewPane() {
@@ -39,8 +40,8 @@ export function initPreviewPane() {
         }
     });
 
-    // Click on file paths to open preview (except copy button)
-    // This handles both explicit file-tool-fullpath elements and any text that looks like a file path
+    // Click on file paths to open preview, or URLs to copy them (except copy button)
+    // This handles both explicit file-tool-fullpath elements and any text that looks like a file path or URL
     document.addEventListener('click', async function(e) {
         // Skip if clicking the copy button
         if (e.target.closest('.copy-btn')) return;
@@ -59,6 +60,14 @@ export function initPreviewPane() {
             e.stopPropagation();
             const path = fullpath.dataset.copyPath;
             openPreviewPane(path);
+            return;
+        }
+
+        // Try to detect URL from clicked text
+        const url = extractUrlFromClick(e);
+        if (url) {
+            copyToClipboard(url, null);
+            showFlash('URL copied to clipboard', 'success', 2000);
             return;
         }
 
@@ -242,6 +251,112 @@ function updateViewToggleLabel() {
     if (label) {
         label.textContent = dom.previewViewCheckbox.checked ? 'Rendered' : 'Source';
     }
+}
+
+/**
+ * Extract a URL from clicked text.
+ * Tries to find http:// or https:// URL in or around the clicked element.
+ * Returns null if no valid URL is found.
+ */
+function extractUrlFromClick(event) {
+    const target = event.target;
+
+    // Get the text content of the clicked element or its innermost text node
+    let text = '';
+
+    if (target.nodeType === Node.ELEMENT_NODE) {
+        // Try to get the specific text at the click position using Range
+        const clickedText = getUrlTextAtPoint(event.clientX, event.clientY);
+        if (clickedText) {
+            text = clickedText;
+        } else {
+            // Fall back to element's text content
+            text = target.textContent || '';
+        }
+    }
+
+    if (!text) return null;
+
+    // Try to extract a URL from the text
+    return findUrlInText(text);
+}
+
+/**
+ * Get the URL text content at a specific point.
+ * Similar to getTextAtPoint but includes URL-valid characters like : and ?
+ */
+function getUrlTextAtPoint(x, y) {
+    let textNode;
+    let offset;
+
+    // Try caretPositionFromPoint (Firefox) or caretRangeFromPoint (Chrome/Safari)
+    if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        if (pos && pos.offsetNode) {
+            textNode = pos.offsetNode;
+            offset = pos.offset;
+        }
+    } else if (document.caretRangeFromPoint) {
+        const range = document.caretRangeFromPoint(x, y);
+        if (range) {
+            textNode = range.startContainer;
+            offset = range.startOffset;
+        }
+    }
+
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+        return null;
+    }
+
+    const fullText = textNode.textContent || '';
+
+    // URL characters - include everything valid in URLs
+    // RFC 3986 unreserved: A-Z a-z 0-9 - . _ ~
+    // RFC 3986 reserved: : / ? # [ ] @ ! $ & ' ( ) * + , ; =
+    // Also include % for percent-encoding
+    const urlChars = /[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]/;
+
+    let start = offset;
+    let end = offset;
+
+    // Expand left
+    while (start > 0 && urlChars.test(fullText[start - 1])) {
+        start--;
+    }
+
+    // Expand right
+    while (end < fullText.length && urlChars.test(fullText[end])) {
+        end++;
+    }
+
+    const word = fullText.substring(start, end);
+    return word.length > 0 ? word : null;
+}
+
+/**
+ * Find a URL pattern in text.
+ * Returns the URL if found, null otherwise.
+ */
+function findUrlInText(text) {
+    // Look for http:// or https:// URLs
+    const urlPattern = /https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+/i;
+    const match = text.match(urlPattern);
+
+    if (match) {
+        // Clean up trailing punctuation that's unlikely to be part of the URL
+        let url = match[0];
+        // Remove trailing punctuation like ), ], ., ,, ;, :, ! if they aren't balanced
+        url = url.replace(/[)\].,;:!]+$/, '');
+        // But restore ) if there's a matching ( in the URL (common in Wikipedia URLs)
+        const openParens = (url.match(/\(/g) || []).length;
+        const closeParens = (url.match(/\)/g) || []).length;
+        if (openParens > closeParens && match[0].charAt(url.length) === ')') {
+            url += ')';
+        }
+        return url;
+    }
+
+    return null;
 }
 
 /**

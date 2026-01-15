@@ -12,6 +12,7 @@ let homeDir = null;
 let lastClickTime = 0;
 let clickCount = 0;
 let lastClickedPath = null;
+let pendingNavigationTimeout = null;
 
 export function initFileTree() {
     // Toggle button in status bar
@@ -182,39 +183,49 @@ function sortChildren(children) {
 function createBrowserItem(item) {
     const li = document.createElement('li');
     li.className = 'tree-item';
-    
+
     const div = document.createElement('div');
     div.className = 'tree-summary';
     div.dataset.path = item.path;
-    
+
+    // Create icon span
+    const icon = document.createElement('span');
+    icon.className = item.type === 'directory' ? 'tree-icon tree-icon-folder' : 'tree-icon tree-icon-file';
+    div.appendChild(icon);
+
+    // Add file/folder name as text node (prevents XSS from malicious filenames)
+    div.appendChild(document.createTextNode(' ' + item.name));
+
     if (item.type === 'directory') {
-        div.innerHTML = `<span class="tree-icon tree-icon-folder"></span> ${item.name}`;
-        
         // Single Click -> Navigate
         // Triple Click -> New Session
         div.addEventListener('click', (e) => {
             handleFolderClick(e, item.path);
         });
-        
     } else {
-        div.innerHTML = `<span class="tree-icon tree-icon-file"></span> ${item.name}`;
         div.addEventListener('click', (e) => {
             // Highlight selection
             document.querySelectorAll('.tree-summary.selected').forEach(el => el.classList.remove('selected'));
             div.classList.add('selected');
-            
+
             // Open preview
             openPreviewPane(item.path);
         });
     }
-    
+
     li.appendChild(div);
     return li;
 }
 
 function handleFolderClick(e, path) {
     const now = Date.now();
-    
+
+    // Clear any pending navigation from previous clicks
+    if (pendingNavigationTimeout) {
+        clearTimeout(pendingNavigationTimeout);
+        pendingNavigationTimeout = null;
+    }
+
     if (path === lastClickedPath && (now - lastClickTime) < 500) {
         clickCount++;
     } else {
@@ -222,49 +233,18 @@ function handleFolderClick(e, path) {
         lastClickedPath = path;
     }
     lastClickTime = now;
-    
+
     if (clickCount === 3) {
-        // Triple Click Detected!
-        // Start new session
+        // Triple Click Detected! Start new session in this folder.
         startNewSessionInFolder(path);
-        clickCount = 0; // Reset
+        clickCount = 0;
         return;
     }
-    
-    // Defer navigation slightly to allow for double/triple click detection?
-    // Actually, for file browser, single click usually enters immediately.
-    // If we wait, it feels laggy.
-    // Let's navigate immediately for single click, and if triple click happens, it happens.
-    // BUT if we navigate away, the DOM is gone, so subsequent clicks might not register on the same element!
-    // Issue: If single click navigates, the element is destroyed. We can't detect triple click on it.
-    
-    // Solution: Keep the triple click logic, but navigation happens on click.
-    // Unless we delay navigation?
-    // "Navigate" means fetching new data. That takes ms.
-    
-    // If we navigate, the view changes. Triple click logic implies we want to start a session in THIS folder.
-    // If we single click, we ENTER the folder.
-    // If we want to start a session IN the folder, we probably shouldn't enter it first?
-    // Or maybe triple click works on the *header* (current dir)?
-    // Or maybe triple click works on the item, but we must prevent navigation?
-    
-    // Standard UI: Double click enters. Single click selects.
-    // My implementation: Single click enters.
-    // If single click enters, triple click is impossible on the item (it disappears).
-    
-    // Maybe we should change to: Single click selects, Double click enters?
-    // User asked "navigate through whole home folder" - usually single click in web UIs.
-    
-    // Hack: If we want triple click, we must delay navigation or use a modifier key.
-    // OR: Triple click on the *Current Path Header* to start session in *current* folder?
-    // OR: Context menu?
-    
-    // Let's assume the user meant: "Triple click a folder to open session THERE".
-    // I will add a slight delay (250ms) before navigating.
-    
-    setTimeout(() => {
-        if (clickCount >= 3) return; // Handled by triple click
-        // Navigate
+
+    // Delay navigation slightly to allow for triple-click detection.
+    // Without this delay, the folder would navigate away before we can detect the third click.
+    pendingNavigationTimeout = setTimeout(() => {
+        pendingNavigationTimeout = null;
         loadFileTree(state.activeSessionId, path);
     }, 300);
 }
