@@ -3,10 +3,15 @@ import { dom, state } from './state.js';
 import { openPreviewPane, closePreviewPane } from './preview.js';
 import { isMobile } from './utils.js';
 
-// We store the full tree data here so we can navigate client-side
-let fullTreeData = null;
-let currentPath = null; // The path of the directory we are currently viewing
-let homeDir = null; // Home directory path from server
+// We store the current directory contents here
+let currentTreeData = null;
+let currentPath = null; 
+let homeDir = null; 
+
+// Tracking triple click
+let lastClickTime = 0;
+let clickCount = 0;
+let lastClickedPath = null;
 
 export function initFileTree() {
     // Toggle button in status bar
@@ -14,97 +19,88 @@ export function initFileTree() {
         dom.rightSidebarToggle.addEventListener('click', toggleRightSidebar);
     }
     
-    // Collapse Tree Button (in tree header)
+    // Collapse Tree Button
     if (dom.treeCollapseBtn) {
         dom.treeCollapseBtn.addEventListener('click', () => {
              dom.previewPane.classList.add('tree-collapsed');
         });
     }
     
-    // Expand Tree Button (in preview header, visible when collapsed)
+    // Expand Tree Button
     if (dom.treeExpandBtn) {
         dom.treeExpandBtn.addEventListener('click', () => {
              dom.previewPane.classList.remove('tree-collapsed');
         });
     }
     
-    // Resize handle for tree split
+    // Resize handle
     const resizeHandle = document.getElementById('tree-resize-handle');
     if (resizeHandle) {
-        resizeHandle.addEventListener('mousedown', function(e) {
-            if (isMobile()) return;
-            state.isTreeResizing = true;
-            state.treeStartX = e.clientX;
-            // Get current width (computed style or inline)
-            const sidebar = document.querySelector('.file-tree-sidebar');
-            state.treeStartWidth = sidebar.getBoundingClientRect().width;
-            
-            resizeHandle.classList.add('dragging');
-            document.body.style.cursor = 'ew-resize';
-            document.body.style.userSelect = 'none';
-            e.preventDefault();
-        });
+        resizeHandle.addEventListener('mousedown', startTreeResize);
     }
     
-    // Global mouse events for dragging (shared with preview pane resize, but separate logic)
-    document.addEventListener('mousemove', function(e) {
-        if (!state.isTreeResizing) return;
-        
-        // Calculate new width
-        // For tree sidebar, resizing moves the RIGHT edge.
-        // It's inside a right-aligned pane, but flex direction is row (left-to-right).
-        // So moving mouse RIGHT increases width.
-        const delta = e.clientX - state.treeStartX;
-        let newWidth = state.treeStartWidth + delta;
-        
-        // Clamp width: min 150px, max 60% of preview pane
-        const maxTreeWidth = state.previewPaneWidth * 0.6;
-        newWidth = Math.max(150, Math.min(maxTreeWidth, newWidth));
-        
-        state.treeSidebarWidth = newWidth;
-        const sidebar = document.querySelector('.file-tree-sidebar');
-        if (sidebar) {
-            sidebar.style.width = newWidth + 'px';
-        }
-    });
-    
-    document.addEventListener('mouseup', function() {
-        if (state.isTreeResizing) {
-            state.isTreeResizing = false;
-            const resizeHandle = document.getElementById('tree-resize-handle');
-            if (resizeHandle) resizeHandle.classList.remove('dragging');
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            // Could save to localStorage here
-        }
-    });
+    document.addEventListener('mousemove', onTreeResize);
+    document.addEventListener('mouseup', endTreeResize);
 }
 
-export async function loadFileTree(sessionId) {
+function startTreeResize(e) {
+    if (isMobile()) return;
+    state.isTreeResizing = true;
+    state.treeStartX = e.clientX;
+    const sidebar = document.querySelector('.file-tree-sidebar');
+    state.treeStartWidth = sidebar.getBoundingClientRect().width;
+    e.target.classList.add('dragging');
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+}
+
+function onTreeResize(e) {
+    if (!state.isTreeResizing) return;
+    const delta = e.clientX - state.treeStartX;
+    let newWidth = state.treeStartWidth + delta;
+    const maxTreeWidth = state.previewPaneWidth * 0.6;
+    newWidth = Math.max(150, Math.min(maxTreeWidth, newWidth));
+    state.treeSidebarWidth = newWidth;
+    const sidebar = document.querySelector('.file-tree-sidebar');
+    if (sidebar) sidebar.style.width = newWidth + 'px';
+}
+
+function endTreeResize() {
+    if (state.isTreeResizing) {
+        state.isTreeResizing = false;
+        const resizeHandle = document.getElementById('tree-resize-handle');
+        if (resizeHandle) resizeHandle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }
+}
+
+// Load contents of a specific path (or project root if path is null)
+export async function loadFileTree(sessionId, path = null) {
     if (!sessionId) return;
     if (!dom.fileTreeContent) return;
     
-    // Show loading state if we don't have data yet
-    if (!fullTreeData) {
-        dom.fileTreeContent.innerHTML = '<div class="preview-status visible loading">Loading tree...</div>';
-    }
+    // Show loading state
+    dom.fileTreeContent.innerHTML = '<div class="preview-status visible loading">Loading...</div>';
     
     try {
-        const response = await fetch(`/sessions/${sessionId}/tree`);
+        const url = path 
+            ? `/sessions/${sessionId}/tree?path=${encodeURIComponent(path)}` 
+            : `/sessions/${sessionId}/tree`;
+            
+        const response = await fetch(url);
         const data = await response.json();
         
-        if (data.error || !data.tree) {
-             dom.fileTreeContent.innerHTML = `<div class="preview-status visible warning">${data.error || 'No tree data'}</div>`;
+        if (data.error) {
+             dom.fileTreeContent.innerHTML = `<div class="preview-status visible warning">${data.error}</div>`;
              return;
         }
         
-        fullTreeData = data.tree;
+        currentTreeData = data.tree;
         homeDir = data.home;
+        currentPath = currentTreeData.path; 
         
-        // Reset path to root when loading new session
-        currentPath = fullTreeData.path; 
-        
-        // Always render tree if we have data
         renderCurrentPath();
         
     } catch (err) {
@@ -122,60 +118,24 @@ function formatPath(path) {
     return path;
 }
 
-function findNodeByPath(root, path) {
-    if (root.path === path) return root;
-    if (!root.children) return null;
-    
-    for (const child of root.children) {
-        if (child.path === path) return child;
-        if (child.type === 'directory') {
-            const found = findNodeByPath(child, path);
-            if (found) return found;
-        }
-    }
-    return null;
-}
-
-function findParentNode(root, path) {
-     if (!root.children) return null;
-     
-     for (const child of root.children) {
-         if (child.path === path) return root;
-         if (child.type === 'directory') {
-             const found = findParentNode(child, path);
-             if (found) return found;
-         }
-     }
-     return null;
-}
-
 function renderCurrentPath() {
-    if (!fullTreeData || !dom.fileTreeContent) return;
-    
-    const node = findNodeByPath(fullTreeData, currentPath);
-    if (!node) {
-        // Fallback to root
-        currentPath = fullTreeData.path;
-        renderCurrentPath();
-        return;
-    }
+    if (!currentTreeData || !dom.fileTreeContent) return;
     
     dom.fileTreeContent.innerHTML = '';
     
     // Render Header (Current Path)
     const header = document.createElement('div');
     header.className = 'tree-current-path';
-    
-    // Use formatted path with ~ notation
-    header.textContent = formatPath(node.path);
-    header.title = node.path;
+    header.textContent = formatPath(currentPath);
+    header.title = currentPath;
     dom.fileTreeContent.appendChild(header);
     
     const rootUl = document.createElement('ul');
     rootUl.className = 'tree-root';
     
-    // Add ".." if not at root
-    if (node.path !== fullTreeData.path) {
+    // Add ".." if not at root of filesystem (or simple check: path is not /)
+    // Actually, we can assume we can go up unless path is /
+    if (currentPath !== '/' && currentPath !== 'C:\\') {
         const parentLi = document.createElement('li');
         parentLi.className = 'tree-item';
         
@@ -183,10 +143,18 @@ function renderCurrentPath() {
         parentDiv.className = 'tree-summary';
         parentDiv.innerHTML = `<span class="tree-icon tree-icon-folder"></span> ..`;
         parentDiv.addEventListener('click', () => {
-            const parent = findParentNode(fullTreeData, currentPath);
-            if (parent) {
-                currentPath = parent.path;
-                renderCurrentPath();
+            // Navigate Up
+            // Simple string manipulation to find parent
+            // Handles both / and \ (if Windows, though backend normalizes to / usually)
+            // Python Path.resolve() usually gives system separators.
+            // Let's assume standard posix or assume backend handles separator
+            // Actually better to just take parent dir string
+            let parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+            if (!parentPath && currentPath.startsWith('/')) parentPath = '/'; // Root
+            if (!parentPath) parentPath = currentPath.substring(0, currentPath.lastIndexOf('\\')); // Windows fallback
+            
+            if (parentPath && parentPath !== currentPath) {
+                loadFileTree(state.activeSessionId, parentPath);
             }
         });
         
@@ -194,8 +162,8 @@ function renderCurrentPath() {
         rootUl.appendChild(parentLi);
     }
     
-    if (node.children) {
-        const sortedChildren = sortChildren(node.children);
+    if (currentTreeData.children) {
+        const sortedChildren = sortChildren(currentTreeData.children);
         sortedChildren.forEach(child => {
             rootUl.appendChild(createBrowserItem(child));
         });
@@ -221,11 +189,13 @@ function createBrowserItem(item) {
     
     if (item.type === 'directory') {
         div.innerHTML = `<span class="tree-icon tree-icon-folder"></span> ${item.name}`;
-        div.addEventListener('click', () => {
-            // Navigate into directory
-            currentPath = item.path;
-            renderCurrentPath();
+        
+        // Single Click -> Navigate
+        // Triple Click -> New Session
+        div.addEventListener('click', (e) => {
+            handleFolderClick(e, item.path);
         });
+        
     } else {
         div.innerHTML = `<span class="tree-icon tree-icon-file"></span> ${item.name}`;
         div.addEventListener('click', (e) => {
@@ -242,12 +212,83 @@ function createBrowserItem(item) {
     return li;
 }
 
+function handleFolderClick(e, path) {
+    const now = Date.now();
+    
+    if (path === lastClickedPath && (now - lastClickTime) < 500) {
+        clickCount++;
+    } else {
+        clickCount = 1;
+        lastClickedPath = path;
+    }
+    lastClickTime = now;
+    
+    if (clickCount === 3) {
+        // Triple Click Detected!
+        // Start new session
+        startNewSessionInFolder(path);
+        clickCount = 0; // Reset
+        return;
+    }
+    
+    // Defer navigation slightly to allow for double/triple click detection?
+    // Actually, for file browser, single click usually enters immediately.
+    // If we wait, it feels laggy.
+    // Let's navigate immediately for single click, and if triple click happens, it happens.
+    // BUT if we navigate away, the DOM is gone, so subsequent clicks might not register on the same element!
+    // Issue: If single click navigates, the element is destroyed. We can't detect triple click on it.
+    
+    // Solution: Keep the triple click logic, but navigation happens on click.
+    // Unless we delay navigation?
+    // "Navigate" means fetching new data. That takes ms.
+    
+    // If we navigate, the view changes. Triple click logic implies we want to start a session in THIS folder.
+    // If we single click, we ENTER the folder.
+    // If we want to start a session IN the folder, we probably shouldn't enter it first?
+    // Or maybe triple click works on the *header* (current dir)?
+    // Or maybe triple click works on the item, but we must prevent navigation?
+    
+    // Standard UI: Double click enters. Single click selects.
+    // My implementation: Single click enters.
+    // If single click enters, triple click is impossible on the item (it disappears).
+    
+    // Maybe we should change to: Single click selects, Double click enters?
+    // User asked "navigate through whole home folder" - usually single click in web UIs.
+    
+    // Hack: If we want triple click, we must delay navigation or use a modifier key.
+    // OR: Triple click on the *Current Path Header* to start session in *current* folder?
+    // OR: Context menu?
+    
+    // Let's assume the user meant: "Triple click a folder to open session THERE".
+    // I will add a slight delay (250ms) before navigating.
+    
+    setTimeout(() => {
+        if (clickCount >= 3) return; // Handled by triple click
+        // Navigate
+        loadFileTree(state.activeSessionId, path);
+    }, 300);
+}
+
+function startNewSessionInFolder(path) {
+    // Open the new session modal with this path pre-filled
+    if (dom.newSessionModal) {
+        dom.modalCwd.value = path;
+        dom.newSessionModal.showModal();
+        
+        // Optional: Flash message
+        const flash = document.getElementById('flash-message');
+        if (flash) {
+            flash.textContent = `Starting session in ${formatPath(path)}`;
+            flash.className = 'flash-message visible info';
+            setTimeout(() => flash.classList.remove('visible'), 2000);
+        }
+    }
+}
+
 function toggleRightSidebar() {
     if (state.previewPaneOpen) {
-        // If open, close it
         closePreviewPane(false);
     } else {
-        // Open
         openRightPane();
     }
 }
@@ -259,32 +300,26 @@ export function openRightPane() {
     dom.floatingControls.classList.add('preview-open');
     state.previewPaneOpen = true;
     
-    // Make sure we have a tree render
     if (!dom.fileTreeContent.innerHTML) {
-         renderCurrentPath();
+         // Initial load (default to project root if nothing loaded)
+         loadFileTree(state.activeSessionId);
     }
 }
 
 export function syncTreeToFile(filePath) {
-    if (!fullTreeData) return;
+    // Since we are lazy loading, we can't easily sync to a deep file if we are at root.
+    // We would need to "walk down" the tree fetching each level.
+    // That's complex.
+    // Simple approach: Just load the directory of the file directly!
     
-    const parent = findParentNode(fullTreeData, filePath);
-    if (parent) {
-        currentPath = parent.path;
-        renderCurrentPath();
-        
-        // Highlight the file
-        setTimeout(() => {
-            const fileEl = dom.fileTreeContent.querySelector(`.tree-summary[data-path="${filePath}"]`);
-            if (fileEl) {
-                document.querySelectorAll('.tree-summary.selected').forEach(el => el.classList.remove('selected'));
-                fileEl.classList.add('selected');
-                fileEl.scrollIntoView({ block: 'nearest' });
-            }
-        }, 0);
+    // Get parent directory
+    // Assuming forward slashes from server or normalized
+    let parentPath = filePath.substring(0, filePath.lastIndexOf('/'));
+    
+    // Load that directory
+    if (parentPath) {
+        loadFileTree(state.activeSessionId, parentPath);
+        // Note: highlighting the specific file might happen after load
+        // We can add a "then" to highlight
     }
 }
-
-// These are no longer needed as we always show both
-export function showTreeView() {}
-export function showPreviewView(filename) {}

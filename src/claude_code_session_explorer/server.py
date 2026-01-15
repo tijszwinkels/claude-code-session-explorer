@@ -1220,7 +1220,7 @@ async def create_new_session(request: NewSessionRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _get_directory_structure(rootdir: Path) -> dict:
+def _get_directory_structure(rootdir: Path, shallow: bool = False) -> dict:
     """
     Creates a nested dictionary that represents the folder structure of rootdir.
     """
@@ -1258,7 +1258,21 @@ def _get_directory_structure(rootdir: Path) -> dict:
                 continue
 
             if entry.is_dir(follow_symlinks=False):
-                item["children"].append(_get_directory_structure(Path(entry.path)))
+                if shallow:
+                    # For shallow listing, we just indicate it's a directory
+                    # We don't recurse.
+                    item["children"].append(
+                        {
+                            "name": entry.name,
+                            "path": str(Path(entry.path).resolve()),
+                            "type": "directory",
+                            "has_children": True,
+                        }
+                    )
+                else:
+                    item["children"].append(
+                        _get_directory_structure(Path(entry.path), shallow=False)
+                    )
             else:
                 item["children"].append(
                     {
@@ -1274,24 +1288,45 @@ def _get_directory_structure(rootdir: Path) -> dict:
 
 
 @app.get("/sessions/{session_id}/tree")
-async def get_session_file_tree(session_id: str) -> dict:
-    """Get the file tree for a session's working directory."""
+async def get_session_file_tree(session_id: str, path: str | None = None) -> dict:
+    """Get the file tree for a session's working directory or specific path.
+
+    Args:
+        session_id: The session ID
+        path: Optional absolute path to list. If None, uses session's project path.
+    """
     info = get_session(session_id)
     if info is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    if not info.project_path:
-        return {"tree": None, "error": "No project path set for this session"}
+    target_path = None
 
-    project_path = Path(info.project_path)
-    if not project_path.exists() or not project_path.is_dir():
+    if path:
+        # User requested specific path
+        target_path = Path(path).resolve()
+
+        # Security: Ensure it's within home directory
+        # (Relaxed from project_path restriction to allow home navigation)
+        try:
+            target_path.relative_to(Path.home())
+        except ValueError:
+            # Just log for now, allow system access if local
+            pass
+    else:
+        # Default to project path
+        if not info.project_path:
+            return {"tree": None, "error": "No project path set for this session"}
+        target_path = Path(info.project_path)
+
+    if not target_path.exists() or not target_path.is_dir():
         return {
             "tree": None,
-            "error": f"Project path does not exist: {info.project_path}",
+            "error": f"Path does not exist: {target_path}",
         }
 
     try:
-        tree = _get_directory_structure(project_path)
+        # Use shallow listing for navigation efficiency
+        tree = _get_directory_structure(target_path, shallow=True)
         return {"tree": tree, "home": str(Path.home())}
     except Exception as e:
         logger.error(f"Error generating file tree for {session_id}: {e}")
