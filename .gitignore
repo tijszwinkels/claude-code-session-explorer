@@ -6,6 +6,10 @@ todo.txt
 opencode.json
 CLAUDE.local.md
 
+# Personal config (use config.example.toml as template)
+config.toml
+.claude-session-explorer.toml
+
 # Python
 __pycache__/
 *.py[cod]
