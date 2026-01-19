@@ -12,11 +12,12 @@ let currentWatchPath = null;
  * @param {string} filePath - Absolute path to the file to watch
  * @param {Object} callbacks - Event handlers
  * @param {function(Object)} callbacks.onInitial - Called with initial file content
- * @param {function(Object)} callbacks.onAppend - Called when content is appended
- * @param {function(Object)} callbacks.onReplace - Called when file is replaced/rewritten
+ * @param {function(Object)} callbacks.onAppend - Called when content is appended (follow=true only)
+ * @param {function(Object)} callbacks.onReplace - Called when file is replaced/rewritten (follow=true only)
+ * @param {function(Object)} callbacks.onChanged - Called when file changed (follow=false only) - frontend should refetch
  * @param {function(string)} callbacks.onError - Called on error
  * @param {Object} options - Watch options
- * @param {boolean} options.follow - If true, detect appends and send only new bytes. If false, always send full file.
+ * @param {boolean} options.follow - If true, detect appends and send content. If false, just notify of changes.
  */
 export function startFileWatch(filePath, callbacks, options = {}) {
     // Stop any existing watch
@@ -53,6 +54,15 @@ export function startFileWatch(filePath, callbacks, options = {}) {
         const data = JSON.parse(e.data);
         if (callbacks.onReplace) {
             callbacks.onReplace(data);
+        }
+    });
+
+    // 'changed' event is sent when follow=false - frontend should refetch via /api/file
+    fileWatchEventSource.addEventListener('changed', function(e) {
+        if (isStale()) return;
+        const data = JSON.parse(e.data);
+        if (callbacks.onChanged) {
+            callbacks.onChanged(data);
         }
     });
 

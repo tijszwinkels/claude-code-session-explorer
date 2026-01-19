@@ -279,6 +279,36 @@ export async function openPreviewPane(filePath) {
                 }
             }
         },
+        onChanged: async function() {
+            // File changed notification (follow=false mode)
+            // Refetch via /api/file to get full content with markdown rendering
+            const scrollPos = dom.previewContent ? dom.previewContent.scrollTop : 0;
+
+            try {
+                const response = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
+                if (!response.ok) {
+                    showPreviewStatus('error', `Failed to reload: ${response.statusText}`);
+                    return;
+                }
+                const data = await response.json();
+
+                state.previewFileData = data;
+                renderPreviewContent(data, dom.previewViewCheckbox ? dom.previewViewCheckbox.checked : true);
+
+                if (data.truncated) {
+                    showPreviewStatus('warning', 'File truncated (showing first 1MB)');
+                } else {
+                    hidePreviewStatus();
+                }
+
+                // Restore scroll position
+                if (dom.previewContent) {
+                    dom.previewContent.scrollTop = scrollPos;
+                }
+            } catch (err) {
+                showPreviewStatus('error', `Failed to reload: ${err.message}`);
+            }
+        },
         onError: function(message) {
             showPreviewStatus('error', message);
             stopFileWatch();

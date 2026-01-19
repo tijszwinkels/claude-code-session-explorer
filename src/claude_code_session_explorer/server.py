@@ -1704,14 +1704,20 @@ async def _file_watch_generator(
                 new_size = stat.st_size
                 new_inode = stat.st_ino
 
-                # Determine change type using tail-style heuristic
-                if new_inode != last_inode:
+                # When follow=false, just notify of change - frontend will refetch via /api/file
+                # This allows the existing endpoint to handle markdown rendering, etc.
+                if not follow:
+                    yield {
+                        "event": "changed",
+                        "data": json.dumps({"size": new_size, "inode": new_inode}),
+                    }
+                # When follow=true, use tail-style heuristic for efficient append detection
+                elif new_inode != last_inode:
                     # File replaced (different inode) - send full content
-                    event_type = "replace"
                     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                         content = f.read(MAX_FILE_SIZE)
                     yield {
-                        "event": event_type,
+                        "event": "replace",
                         "data": json.dumps(
                             {
                                 "content": content,
@@ -1721,14 +1727,13 @@ async def _file_watch_generator(
                             }
                         ),
                     }
-                elif new_size > last_size and follow:
-                    # File grew and follow mode - likely append, read only new bytes
-                    event_type = "append"
+                elif new_size > last_size:
+                    # File grew - likely append, read only new bytes
                     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                         f.seek(last_size)
                         new_content = f.read(MAX_FILE_SIZE)
                     yield {
-                        "event": event_type,
+                        "event": "append",
                         "data": json.dumps(
                             {
                                 "content": new_content,
@@ -1738,11 +1743,10 @@ async def _file_watch_generator(
                     }
                 elif new_size < last_size:
                     # File truncated - send full content
-                    event_type = "replace"
                     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                         content = f.read(MAX_FILE_SIZE)
                     yield {
-                        "event": event_type,
+                        "event": "replace",
                         "data": json.dumps(
                             {
                                 "content": content,
@@ -1754,11 +1758,10 @@ async def _file_watch_generator(
                     }
                 else:
                     # Same size but modified - in-place edit, send full content
-                    event_type = "replace"
                     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                         content = f.read(MAX_FILE_SIZE)
                     yield {
-                        "event": event_type,
+                        "event": "replace",
                         "data": json.dumps(
                             {
                                 "content": content,
