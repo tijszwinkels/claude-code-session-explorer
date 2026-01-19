@@ -12,6 +12,7 @@ import { initSortSelect, initCopyButtons, reorderSidebar } from './sessions.js';
 import { initMessaging } from './messaging.js';
 import { initModal } from './modal.js';
 import { connect, initVisibilityHandler } from './connection.js';
+import { initSidebarContextMenu } from './sidebar-context-menu.js';
 
 // Initialize the application
 function init() {
@@ -35,6 +36,7 @@ function init() {
     // Initialize session management
     initSortSelect(reorderSidebar);
     initCopyButtons();
+    initSidebarContextMenu();
 
     // Initialize messaging (input bar)
     initMessaging();
