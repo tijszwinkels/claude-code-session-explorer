@@ -404,6 +404,12 @@ export async function loadFileTree(sessionId, path = null) {
 
         currentTreeData = data.tree;
         homeDir = data.home;
+
+        if (!currentTreeData) {
+            dom.fileTreeContent.innerHTML = '<div class="preview-status visible warning">No tree data available</div>';
+            return;
+        }
+
         currentPath = currentTreeData.path;
 
         // Store project root from the response (first load without path = project root)
