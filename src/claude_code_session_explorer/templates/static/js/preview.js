@@ -35,11 +35,17 @@ export function initPreviewPane() {
     }
 
     // Follow checkbox for auto-scroll on new content
+    // Toggling also restarts the SSE connection with the new follow mode
     if (dom.previewFollowCheckbox) {
         dom.previewFollowCheckbox.checked = state.previewFollow;
         dom.previewFollowCheckbox.addEventListener('change', function() {
             state.previewFollow = dom.previewFollowCheckbox.checked;
             localStorage.setItem('previewFollow', state.previewFollow);
+
+            // Restart file watch with new follow mode if a file is open
+            if (state.previewFilePath) {
+                openPreviewPane(state.previewFilePath);
+            }
         });
     }
 
@@ -154,16 +160,21 @@ export async function openPreviewPane(filePath) {
     // Stop any existing file watch
     stopFileWatch();
 
+    // Check if this is a new file or just a restart (e.g., from toggling Follow)
+    const isNewFile = state.previewFilePath !== filePath;
+
     state.previewFilePath = filePath;
     state.previewFileData = null;
     const filename = filePath.split('/').pop();
 
-    // Auto-enable Follow for log-like files (.log, .jsonl)
-    const ext = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
-    if (ext === 'log' || ext === 'jsonl') {
-        state.previewFollow = true;
-        if (dom.previewFollowCheckbox) {
-            dom.previewFollowCheckbox.checked = true;
+    // Auto-enable Follow for log-like files (.log, .jsonl) - only on first open
+    if (isNewFile) {
+        const ext = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
+        if (ext === 'log' || ext === 'jsonl') {
+            state.previewFollow = true;
+            if (dom.previewFollowCheckbox) {
+                dom.previewFollowCheckbox.checked = true;
+            }
         }
     }
 

@@ -1691,8 +1691,9 @@ async def _file_watch_generator(
             ),
         }
 
-        # Watch for changes
-        async for changes in watchfiles.awatch(file_path):
+        # Watch for changes with debouncing to batch rapid updates
+        # 100ms debounce prevents overwhelming the client with rapid file changes
+        async for changes in watchfiles.awatch(file_path, debounce=100):
             # Check if client disconnected
             if await request.is_disconnected():
                 logger.debug(f"Client disconnected, stopping file watch for {file_path}")

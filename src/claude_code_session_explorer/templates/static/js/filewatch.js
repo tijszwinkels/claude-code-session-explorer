@@ -28,7 +28,12 @@ export function startFileWatch(filePath, callbacks, options = {}) {
 
     fileWatchEventSource = new EventSource(url);
 
+    // Guard function to prevent processing events for stale connections
+    // (e.g., if user rapidly switches between files)
+    const isStale = () => currentWatchPath !== filePath;
+
     fileWatchEventSource.addEventListener('initial', function(e) {
+        if (isStale()) return;  // Ignore events for old file
         const data = JSON.parse(e.data);
         if (callbacks.onInitial) {
             callbacks.onInitial(data);
@@ -36,6 +41,7 @@ export function startFileWatch(filePath, callbacks, options = {}) {
     });
 
     fileWatchEventSource.addEventListener('append', function(e) {
+        if (isStale()) return;
         const data = JSON.parse(e.data);
         if (callbacks.onAppend) {
             callbacks.onAppend(data);
@@ -43,6 +49,7 @@ export function startFileWatch(filePath, callbacks, options = {}) {
     });
 
     fileWatchEventSource.addEventListener('replace', function(e) {
+        if (isStale()) return;
         const data = JSON.parse(e.data);
         if (callbacks.onReplace) {
             callbacks.onReplace(data);
@@ -50,6 +57,7 @@ export function startFileWatch(filePath, callbacks, options = {}) {
     });
 
     fileWatchEventSource.addEventListener('error', function(e) {
+        if (isStale()) return;
         // Check if this is an SSE error event with data
         if (e.data) {
             const data = JSON.parse(e.data);
@@ -61,12 +69,13 @@ export function startFileWatch(filePath, callbacks, options = {}) {
 
     fileWatchEventSource.onerror = function(e) {
         // Connection error - attempt reconnect after delay
-        if (fileWatchEventSource.readyState === EventSource.CLOSED) {
+        if (fileWatchEventSource && fileWatchEventSource.readyState === EventSource.CLOSED) {
             console.warn('File watch connection closed, attempting reconnect...');
             // Reconnect after 1 second if we're still watching the same file
             setTimeout(function() {
                 if (currentWatchPath === filePath && state.previewPaneOpen) {
-                    startFileWatch(filePath, callbacks);
+                    // Use current follow state, not the stale one from options
+                    startFileWatch(filePath, callbacks, { follow: state.previewFollow });
                 }
             }, 1000);
         }
