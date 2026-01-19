@@ -13,6 +13,7 @@ import {
 } from './ui.js';
 import { closePreviewPane, openPreviewPane } from './preview.js';
 import { loadFileTree, setProjectRoot } from './filetree.js';
+import { showProjectContextMenu, showSessionContextMenu } from './sidebar-context-menu.js';
 
 // Forward declaration for circular dependency - will be set by messaging.js
 let updateInputBarUI = () => {};
@@ -103,6 +104,11 @@ export function getOrCreateProject(projectName, projectPath) {
     projectNewBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         createPendingSession(projectPath || null, projectName);
+    });
+
+    // Right-click context menu for project header
+    projectHeader.addEventListener('contextmenu', function(e) {
+        showProjectContextMenu(e, projectPath, projectName);
     });
 
     // Date section toggle handlers and tooltips
@@ -203,6 +209,11 @@ export function createSession(sessionId, name, projectName, firstMessage, starte
     sidebarItem.addEventListener('mouseleave', hideTooltip);
     sidebarItem.addEventListener('mousemove', function(e) {
         positionTooltip(e);
+    });
+
+    // Right-click context menu for session
+    sidebarItem.addEventListener('contextmenu', function(e) {
+        showSessionContextMenu(e, sessionId);
     });
 
     // Add to project in appropriate date section

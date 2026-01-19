@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 import watchfiles
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -1296,6 +1296,40 @@ async def interrupt_session(session_id: str) -> dict:
     await broadcast_session_status(session_id)
 
     return {"status": "interrupted", "session_id": session_id}
+
+
+@app.post("/sessions/{session_id}/summarize")
+async def trigger_summary(session_id: str, background_tasks: BackgroundTasks) -> dict:
+    """Manually trigger summarization for a session.
+
+    This endpoint allows users to request an on-demand summary of a session,
+    useful when automatic idle summarization is disabled or when a user wants
+    an immediate summary.
+    """
+    info = get_session(session_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if _summarizer is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Summarization is not configured. Start server with summarization options.",
+        )
+
+    # Run summarization in background task to not block the response
+    async def run_summary():
+        try:
+            success = await _summarize_session_async(info, model=_idle_summary_model)
+            if success:
+                logger.info(f"Manual summary triggered successfully for {session_id}")
+            else:
+                logger.warning(f"Manual summary failed for {session_id}")
+        except Exception as e:
+            logger.error(f"Error during manual summary for {session_id}: {e}")
+
+    background_tasks.add_task(run_summary)
+
+    return {"status": "summarizing", "session_id": session_id}
 
 
 @app.post("/sessions/new")
