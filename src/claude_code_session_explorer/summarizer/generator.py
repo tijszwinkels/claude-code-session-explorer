@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,7 @@ class Summarizer:
         log_writer: LogWriter | None = None,
         prompt: str | None = None,
         prompt_file: Path | None = None,
+        thinking_budget: int | None = None,
     ):
         """Initialize the summarizer.
 
@@ -64,11 +66,13 @@ class Summarizer:
             log_writer: Optional log writer for JSONL output.
             prompt: Optional custom prompt template.
             prompt_file: Optional path to prompt template file.
+            thinking_budget: Fixed thinking token budget (for cache consistency).
         """
         self.backend = backend
         self.log_writer = log_writer or LogWriter()
         self.prompt = prompt
         self.prompt_file = prompt_file
+        self.thinking_budget = thinking_budget
 
     async def summarize(self, session: SessionInfo, model: str | None = None) -> SummaryResult:
         """Generate a summary for a session.
@@ -122,11 +126,18 @@ class Summarizer:
             # Claude CLI requires being in the project directory to find sessions
             cwd = session.project_path if session.project_path else None
 
+            # Set up environment with thinking budget if configured
+            env = None
+            if self.thinking_budget is not None:
+                env = {**os.environ, "MAX_THINKING_TOKENS": str(self.thinking_budget)}
+                logger.debug(f"Using thinking budget: {self.thinking_budget}")
+
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
+                env=env,
             )
 
             try:

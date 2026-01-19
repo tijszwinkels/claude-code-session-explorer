@@ -166,6 +166,7 @@ def configure_summarization(
         log_writer=log_writer,
         prompt=summary_prompt,
         prompt_file=summary_prompt_file,
+        thinking_budget=_thinking_budget,
     )
 
     # Store settings for later use
@@ -205,6 +206,7 @@ async def _summarize_session_async(session: SessionInfo, model: str | None = Non
         log_writer=_summarizer.log_writer,
         prompt=_summarizer.prompt,
         prompt_file=_summarizer.prompt_file,
+        thinking_budget=_summarizer.thinking_budget,
     )
 
     # Use idle model by default (for idle tracker callbacks)
