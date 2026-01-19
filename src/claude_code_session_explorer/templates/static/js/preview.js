@@ -5,6 +5,19 @@ import { openRightPane, syncTreeToFile, loadFileTree } from './filetree.js';
 import { showFlash } from './ui.js';
 import { startFileWatch, stopFileWatch } from './filewatch.js';
 
+// Image file extensions that can be displayed in the preview pane
+const IMAGE_EXTENSIONS = new Set([
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'
+]);
+
+/**
+ * Check if a filename is an image file based on extension.
+ */
+function isImageFile(filename) {
+    const ext = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
+    return IMAGE_EXTENSIONS.has(ext);
+}
+
 // Initialize preview pane width
 export function initPreviewPane() {
     document.documentElement.style.setProperty('--preview-pane-width', state.previewPaneWidth + 'px');
@@ -197,6 +210,14 @@ export async function openPreviewPane(filePath) {
 
     // Sync tree to this file
     syncTreeToFile(filePath);
+
+    // Handle image files differently - no file watching, just display
+    if (isImageFile(filename)) {
+        if (dom.previewFollowToggle) dom.previewFollowToggle.style.display = 'none';  // Hide Follow toggle for images
+        renderImagePreview(filePath);
+        hidePreviewStatus();
+        return;
+    }
 
     // For follow=false, fetch initial content via /api/file (gets markdown rendering)
     // For follow=true, SSE initial event provides content (no markdown needed for logs)
@@ -413,6 +434,32 @@ function renderPreviewContent(data, showRendered = true) {
     if (window.hljs) {
         hljs.highlightElement(code);
     }
+}
+
+/**
+ * Render an image file in the preview pane.
+ * Uses the /api/file/raw endpoint to serve the image.
+ */
+function renderImagePreview(filePath) {
+    if (!dom.previewContent) return;
+
+    dom.previewContent.innerHTML = '';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-preview';
+
+    const img = document.createElement('img');
+    // Add timestamp to bust browser cache on reload
+    img.src = `/api/file/raw?path=${encodeURIComponent(filePath)}&t=${Date.now()}`;
+    img.alt = filePath.split('/').pop();
+
+    // Handle load error
+    img.onerror = function() {
+        showPreviewStatus('error', 'Failed to load image');
+    };
+
+    wrapper.appendChild(img);
+    dom.previewContent.appendChild(wrapper);
 }
 
 function showPreviewStatus(type, message) {

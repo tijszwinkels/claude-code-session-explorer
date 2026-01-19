@@ -656,6 +656,25 @@ button:hover .hamburger-icon span {
 [data-theme="dark"] .markdown-preview tbody tr:hover { background: rgba(66, 165, 245, 0.08); }
 [data-theme="dark"] .markdown-preview tbody tr:nth-child(even):hover { background: rgba(66, 165, 245, 0.1); }
 
+/* Image preview */
+.image-preview {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px;
+    min-height: 100%;
+}
+.image-preview img {
+    max-width: 100%;
+    max-height: calc(100vh - 200px);
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+[data-theme="dark"] .image-preview img {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
 /* Tree Node Styles */
 .tree-root {
     margin: 0;

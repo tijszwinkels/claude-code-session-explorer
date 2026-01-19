@@ -379,6 +379,18 @@ EXTENSION_TO_LANGUAGE = {
 
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
 
+# Image file extensions and their MIME types
+IMAGE_EXTENSIONS = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".bmp": "image/bmp",
+}
+
 
 class NewSessionRequest(BaseModel):
     """Request body for starting a new session."""
@@ -1591,6 +1603,64 @@ async def get_file(path: str) -> FileResponse:
         raise HTTPException(status_code=403, detail=f"Permission denied: {path}")
     except HTTPException:
         raise
+    except Exception as e:
+        logger.error(f"Error reading file {path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
+
+
+@app.get("/api/file/raw")
+async def get_file_raw(path: str) -> Response:
+    """Serve raw file bytes with appropriate Content-Type.
+
+    Primarily used for serving images in the file preview pane.
+
+    Args:
+        path: Absolute path to the file to serve.
+
+    Returns:
+        Raw file bytes with Content-Type header.
+
+    Raises:
+        HTTPException: 404 if file not found, 403 if permission denied.
+    """
+    file_path = Path(path)
+
+    # Security: Restrict to user's home directory to prevent path traversal
+    home_dir = Path.home()
+    try:
+        resolved_path = file_path.resolve()
+        resolved_path.relative_to(home_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: path must be within home directory ({home_dir})",
+        )
+
+    # Validate path exists
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+    # Ensure it's a file, not directory
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail=f"Not a file: {path}")
+
+    # Determine content type from extension
+    extension = file_path.suffix.lower()
+    content_type = IMAGE_EXTENSIONS.get(extension, "application/octet-stream")
+
+    try:
+        with open(file_path, "rb") as f:
+            content = f.read()
+
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "private, max-age=3600",  # Cache for 1 hour
+            },
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {path}")
     except Exception as e:
         logger.error(f"Error reading file {path}: {e}")
         raise HTTPException(status_code=500, detail=f"Error reading file: {e}")

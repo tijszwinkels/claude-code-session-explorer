@@ -674,6 +674,103 @@ Normal **bold** text.
         assert "<strong>bold</strong>" in rendered
 
 
+class TestFileRawAPI:
+    """Tests for the /api/file/raw endpoint (for serving images)."""
+
+    def test_get_image_png(self, home_tmp_path):
+        """Test serving a PNG image."""
+        png_file = home_tmp_path / "test.png"
+        # Create a minimal valid PNG (1x1 pixel, red)
+        png_data = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
+            b"\x00\x00\x00\x03\x00\x01\x00\x05\xfe\xd4\xef\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        png_file.write_bytes(png_data)
+
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={png_file}")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content == png_data
+
+    def test_get_image_jpeg(self, home_tmp_path):
+        """Test serving a JPEG image."""
+        jpg_file = home_tmp_path / "test.jpg"
+        # Create a minimal valid JPEG
+        jpg_data = bytes(
+            [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00]
+            + [0] * 10
+            + [0xFF, 0xD9]
+        )
+        jpg_file.write_bytes(jpg_data)
+
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={jpg_file}")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/jpeg"
+
+    def test_get_image_svg(self, home_tmp_path):
+        """Test serving an SVG image."""
+        svg_file = home_tmp_path / "test.svg"
+        svg_content = b'<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>'
+        svg_file.write_bytes(svg_content)
+
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={svg_file}")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/svg+xml"
+        assert response.content == svg_content
+
+    def test_get_raw_file_not_found(self, home_tmp_path):
+        """Test 404 for missing file."""
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={home_tmp_path}/nonexistent.png")
+
+        assert response.status_code == 404
+
+    def test_get_raw_file_directory_rejected(self, home_tmp_path):
+        """Test that directories are rejected."""
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={home_tmp_path}")
+
+        assert response.status_code == 400
+
+    def test_get_raw_file_outside_home_rejected(self):
+        """Test that files outside home directory are rejected."""
+        client = TestClient(app)
+        response = client.get("/api/file/raw?path=/etc/passwd")
+
+        assert response.status_code == 403
+        assert "home directory" in response.json()["detail"]
+
+    def test_get_raw_file_unknown_extension(self, home_tmp_path):
+        """Test unknown extension returns octet-stream."""
+        unknown_file = home_tmp_path / "test.xyz"
+        unknown_file.write_bytes(b"some binary data")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={unknown_file}")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/octet-stream"
+
+    def test_get_raw_file_has_cache_header(self, home_tmp_path):
+        """Test that response includes cache header."""
+        png_file = home_tmp_path / "test.png"
+        png_file.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        client = TestClient(app)
+        response = client.get(f"/api/file/raw?path={png_file}")
+
+        assert response.status_code == 200
+        assert "cache-control" in response.headers
+        assert "max-age" in response.headers["cache-control"]
+
+
 class TestPathTypeAPI:
     """Tests for the path type check API endpoint."""
 
