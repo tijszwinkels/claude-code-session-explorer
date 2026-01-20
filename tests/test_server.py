@@ -1618,16 +1618,13 @@ class TestArchivedSessionsEndpoints:
     """Tests for archived sessions endpoints."""
 
     @pytest.fixture(autouse=True)
-    def reset_archived_sessions(self, home_tmp_path):
-        """Reset archived sessions config before each test."""
-        config_path = server._get_archived_sessions_path()
-        # Clean up any existing config
-        if config_path.exists():
-            config_path.unlink()
+    def use_temp_config_dir(self, home_tmp_path, monkeypatch):
+        """Use a temporary config directory to avoid deleting user's real config."""
+        temp_config_dir = home_tmp_path / "config"
+        temp_config_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(server, "CONFIG_DIR", temp_config_dir)
         yield
-        # Clean up after test
-        if config_path.exists():
-            config_path.unlink()
+        # Cleanup happens automatically when home_tmp_path is removed
 
     def test_get_archived_sessions_empty(self):
         """Test getting archived sessions when none exist."""
