@@ -199,6 +199,14 @@ class OpenCodeBackend:
         """
         return False
 
+    def supports_permission_detection(self) -> bool:
+        """Whether this backend supports permission denial detection.
+
+        OpenCode does not support permission detection - permissions are
+        configured via the OpenCode config file.
+        """
+        return False
+
     def is_cli_available(self) -> bool:
         """Check if the CLI tool is installed and available."""
         return is_cli_available()
@@ -212,6 +220,7 @@ class OpenCodeBackend:
         session_id: str,
         message: str,
         skip_permissions: bool = False,
+        output_format: str | None = None,
     ) -> list[str]:
         """Build the CLI command to send a message.
 
@@ -219,6 +228,7 @@ class OpenCodeBackend:
             session_id: Session to send to.
             message: Message text.
             skip_permissions: Ignored for OpenCode.
+            output_format: Ignored for OpenCode.
 
         Returns:
             Command arguments list.
@@ -230,6 +240,7 @@ class OpenCodeBackend:
         session_id: str,
         message: str,
         skip_permissions: bool = False,
+        output_format: str | None = None,
     ) -> list[str]:
         """Build the CLI command to fork a session.
 
@@ -245,6 +256,7 @@ class OpenCodeBackend:
         message: str,
         skip_permissions: bool = False,
         model: str | None = None,
+        output_format: str | None = None,
     ) -> list[str]:
         """Build the CLI command to start a new session.
 
@@ -252,6 +264,7 @@ class OpenCodeBackend:
             message: Initial message.
             skip_permissions: Ignored for OpenCode.
             model: Model to use (e.g., "anthropic/claude-sonnet-4-5"). Optional.
+            output_format: Ignored for OpenCode.
 
         Returns:
             Command arguments list.

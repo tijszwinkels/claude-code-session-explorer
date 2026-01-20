@@ -154,13 +154,23 @@ async function startPendingSession(pendingSession, message) {
             body: JSON.stringify(requestBody)
         });
 
+        const data = await response.json();
+
         if (response.ok) {
-            dom.messageInput.value = '';
-            autoResizeTextarea();
-            pendingSession.starting = true;
-            pendingSession.startedAt = Date.now();
+            if (data.status === 'permission_denied') {
+                // Handle permission denial for new session
+                // Import and show permission modal with special handling for new sessions
+                const { showPermissionModalForNewSession } = await import('./permissions.js');
+                showPermissionModalForNewSession(data);
+                dom.inputStatus.textContent = '';
+                dom.inputStatus.className = 'input-status';
+            } else {
+                dom.messageInput.value = '';
+                autoResizeTextarea();
+                pendingSession.starting = true;
+                pendingSession.startedAt = Date.now();
+            }
         } else {
-            const data = await response.json();
             alert('Error: ' + (data.detail || 'Failed to start session'));
             dom.inputStatus.textContent = '';
             dom.inputStatus.className = 'input-status';
