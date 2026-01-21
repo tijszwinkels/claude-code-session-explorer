@@ -681,18 +681,103 @@ def get_entry_role(entry: dict, backend: SessionBackend) -> str:
         return info.get("role", "")
 
 
-def render_entry(entry: dict, backend: SessionBackend) -> str:
-    """Render an entry to HTML based on backend type."""
+def render_entry(entry: dict, backend: SessionBackend, hide_tools: bool = False) -> str:
+    """Render an entry to HTML based on backend type.
+
+    Args:
+        entry: The message entry to render
+        backend: The backend type (claude_code or opencode)
+        hide_tools: If True, filter out tool calls and results
+
+    Returns:
+        HTML string for the entry
+    """
+    if hide_tools:
+        entry = filter_entry_tools(entry, backend)
+        if entry is None:
+            return ""
+
     if backend == "claude_code":
         return claude_render_message(entry)
     else:  # opencode
         return opencode_render_message(entry)
 
 
+def filter_entry_tools(entry: dict, backend: SessionBackend) -> dict | None:
+    """Filter tool-related content from an entry.
+
+    Args:
+        entry: The message entry to filter
+        backend: The backend type
+
+    Returns:
+        Filtered entry, or None if entry should be skipped entirely
+    """
+    if backend == "claude_code":
+        return _filter_claude_code_entry(entry)
+    else:
+        return _filter_opencode_entry(entry)
+
+
+def _filter_claude_code_entry(entry: dict) -> dict | None:
+    """Filter tool content from Claude Code entry."""
+    message_data = entry.get("message", {})
+    content = message_data.get("content", [])
+    entry_type = entry.get("type", "")
+
+    # User messages with tool_result content should be skipped entirely
+    if entry_type == "user" and isinstance(content, list):
+        if all(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+            return None
+
+    # For assistant messages, filter out tool_use blocks
+    if entry_type == "assistant" and isinstance(content, list):
+        filtered_content = [
+            block for block in content
+            if not isinstance(block, dict) or block.get("type") != "tool_use"
+        ]
+        if not filtered_content:
+            return None
+        # Check if remaining content is only empty text blocks
+        has_actual_content = any(
+            isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()
+            for b in filtered_content
+        )
+        if not has_actual_content:
+            return None
+        # Return a modified copy
+        filtered_entry = dict(entry)
+        filtered_entry["message"] = dict(message_data)
+        filtered_entry["message"]["content"] = filtered_content
+        return filtered_entry
+
+    return entry
+
+
+def _filter_opencode_entry(entry: dict) -> dict | None:
+    """Filter tool content from OpenCode entry."""
+    parts = entry.get("parts", [])
+
+    # Filter out tool parts
+    filtered_parts = [
+        part for part in parts
+        if not isinstance(part, dict) or part.get("type") != "tool"
+    ]
+
+    if not filtered_parts:
+        return None
+
+    # Return a modified copy
+    filtered_entry = dict(entry)
+    filtered_entry["parts"] = filtered_parts
+    return filtered_entry
+
+
 def generate_html(
     session_path: Path,
     output_dir: Path,
     github_repo: str | None = None,
+    hide_tools: bool = False,
 ) -> Path:
     """Generate static HTML transcript from session file.
 
@@ -700,6 +785,7 @@ def generate_html(
         session_path: Path to session file (JSONL for Claude Code, or session ID for OpenCode)
         output_dir: Directory to write HTML files
         github_repo: Optional GitHub repo for commit links (owner/repo)
+        hide_tools: If True, hide tool calls and results, showing only conversation
 
     Returns:
         Path to generated index.html
@@ -767,7 +853,7 @@ def generate_html(
             is_first = True
             conv_backend = conv.get("backend", backend)
             for entry in conv["messages"]:
-                msg_html = render_entry(entry, conv_backend)
+                msg_html = render_entry(entry, conv_backend, hide_tools=hide_tools)
                 if msg_html:
                     # Wrap continuation summaries in collapsed details
                     if is_first and conv.get("is_continuation"):
@@ -938,6 +1024,7 @@ def create_gist(output_dir: Path, public: bool = False) -> tuple[str, str]:
 def export_markdown(
     session_path: Path,
     output_path: Path | None = None,
+    hide_tools: bool = False,
 ) -> str:
     """Export session to Markdown.
 
@@ -945,13 +1032,14 @@ def export_markdown(
         session_path: Path to session file (JSONL for Claude Code, or session ID for OpenCode)
         output_path: Optional output file path. If None, returns markdown string.
                     If path ends with '/', creates file with auto-generated name.
+        hide_tools: If True, hide tool calls and results, showing only conversation
 
     Returns:
         If output_path is None: the markdown string
         If output_path is provided: the path to the written file
     """
     entries, backend = parse_session_entries(session_path)
-    markdown_content = format_session_as_markdown(entries, session_path, backend)
+    markdown_content = format_session_as_markdown(entries, session_path, backend, hide_tools=hide_tools)
 
     if output_path is None:
         return markdown_content
@@ -966,7 +1054,10 @@ def export_markdown(
 
 
 def format_session_as_markdown(
-    entries: list[dict], session_path: Path, backend: SessionBackend = "claude_code"
+    entries: list[dict],
+    session_path: Path,
+    backend: SessionBackend = "claude_code",
+    hide_tools: bool = False,
 ) -> str:
     """Convert parsed session messages to Markdown format.
 
@@ -974,6 +1065,7 @@ def format_session_as_markdown(
         entries: List of parsed session entries
         session_path: Path to the session file (for metadata)
         backend: The backend type for these entries
+        hide_tools: If True, hide tool calls and results, showing only conversation
 
     Returns:
         Formatted markdown string
@@ -989,8 +1081,8 @@ def format_session_as_markdown(
     lines.append(f"**Session:** {session_path.stem}")
     lines.append(f"**Project:** {session_path.parent.name}")
 
-    # Get first timestamp if available
-    if entries:
+    # Get first timestamp if available (skip if hide_tools for LLM-friendly output)
+    if entries and not hide_tools:
         first_ts = get_entry_timestamp(entries[0], backend)
         if first_ts:
             lines.append(f"**Date:** {first_ts}")
@@ -1021,6 +1113,9 @@ def format_session_as_markdown(
             )
 
             if is_tool_result:
+                # Skip tool results if hide_tools is enabled
+                if hide_tools:
+                    continue
                 # Format tool results
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
@@ -1045,15 +1140,18 @@ def format_session_as_markdown(
                 prompt_num += 1
                 lines.append(f"## Prompt {prompt_num}")
                 lines.append("")
-                lines.append(f"**User** ({timestamp}):")
+                if hide_tools:
+                    lines.append("**User:**")
+                else:
+                    lines.append(f"**User** ({timestamp}):")
                 lines.append("")
                 text = extract_text_from_content(content)
                 lines.append(text)
                 lines.append("")
 
         elif role == "assistant":
-            lines.append(f"**Assistant** ({timestamp}):")
-            lines.append("")
+            # Collect assistant content first, then output only if non-empty
+            assistant_lines = []
 
             if isinstance(content, list):
                 for block in content:
@@ -1062,33 +1160,42 @@ def format_session_as_markdown(
 
                     block_type = block.get("type", "")
 
+                    # Skip tool_use blocks if hide_tools is enabled
+                    if hide_tools and block_type == "tool_use":
+                        continue
+
                     if block_type == "text":
-                        lines.append(block.get("text", ""))
-                        lines.append("")
+                        text = block.get("text", "")
+                        if text.strip():  # Only add non-empty text
+                            assistant_lines.append(text)
+                            assistant_lines.append("")
 
                     elif block_type == "thinking":
                         # Claude Code thinking
-                        lines.append("*Thinking:*")
-                        lines.append("")
-                        lines.append(f"> {block.get('thinking', '')}")
-                        lines.append("")
+                        assistant_lines.append("*Thinking:*")
+                        assistant_lines.append("")
+                        assistant_lines.append(f"> {block.get('thinking', '')}")
+                        assistant_lines.append("")
 
                     elif block_type == "reasoning":
                         # OpenCode reasoning (similar to thinking)
                         reasoning = block.get("reasoning", "")
-                        lines.append("*Reasoning:*")
-                        lines.append("")
+                        assistant_lines.append("*Reasoning:*")
+                        assistant_lines.append("")
                         for line in reasoning.split("\n"):
-                            lines.append(f"> {line}")
-                        lines.append("")
+                            assistant_lines.append(f"> {line}")
+                        assistant_lines.append("")
 
                     elif block_type == "tool_use":
-                        # Claude Code tool use
+                        # Claude Code tool use - already skipped above if hide_tools
                         tool_name = block.get("name", "Unknown")
                         tool_input = block.get("input", {})
-                        _format_tool_md(lines, tool_name, tool_input)
+                        _format_tool_md(assistant_lines, tool_name, tool_input)
 
                     elif block_type == "tool":
+                        # Skip tool parts if hide_tools is enabled
+                        if hide_tools:
+                            continue
                         # OpenCode tool part
                         tool_field = block.get("tool", "")
                         if isinstance(tool_field, str):
@@ -1106,15 +1213,15 @@ def format_session_as_markdown(
                         tool_output = state.get("output", {})
                         tool_error = state.get("error", "")
 
-                        _format_tool_md(lines, tool_name, tool_input)
+                        _format_tool_md(assistant_lines, tool_name, tool_input)
 
                         # Include output/error if present
                         if tool_error:
-                            lines.append("**Error:**")
-                            lines.append("```")
-                            lines.append(tool_error)
-                            lines.append("```")
-                            lines.append("")
+                            assistant_lines.append("**Error:**")
+                            assistant_lines.append("```")
+                            assistant_lines.append(tool_error)
+                            assistant_lines.append("```")
+                            assistant_lines.append("")
                         elif tool_output:
                             output_str = (
                                 tool_output
@@ -1123,18 +1230,26 @@ def format_session_as_markdown(
                             )
                             if len(output_str) > 2000:
                                 output_str = output_str[:2000] + "\n... (truncated)"
-                            lines.append("**Output:**")
-                            lines.append("```")
-                            lines.append(output_str)
-                            lines.append("```")
-                            lines.append("")
+                            assistant_lines.append("**Output:**")
+                            assistant_lines.append("```")
+                            assistant_lines.append(output_str)
+                            assistant_lines.append("```")
+                            assistant_lines.append("")
 
                     elif block_type == "step-finish":
                         # OpenCode step finish - skip or add cost info
                         pass
 
-            lines.append("---")
-            lines.append("")
+            # Only output assistant message if there's actual content
+            if assistant_lines:
+                if hide_tools:
+                    lines.append("**Assistant:**")
+                else:
+                    lines.append(f"**Assistant** ({timestamp}):")
+                lines.append("")
+                lines.extend(assistant_lines)
+                lines.append("---")
+                lines.append("")
 
     return "\n".join(lines)
 

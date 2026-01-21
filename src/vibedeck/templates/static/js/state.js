@@ -29,6 +29,7 @@ export const dom = {
     autoSwitchCheckbox: null,
     autoSwitchLabel: null,
     statusColorsCheckbox: null,
+    hideToolsCheckbox: null,
     groupBySelect: null,
     orderBySelect: null,
     searchInput: null,
@@ -99,6 +100,7 @@ export function initDom() {
     dom.autoSwitchCheckbox = document.getElementById('auto-switch');
     dom.autoSwitchLabel = document.getElementById('auto-switch-label');
     dom.statusColorsCheckbox = document.getElementById('status-colors');
+    dom.hideToolsCheckbox = document.getElementById('hide-tools');
     dom.groupBySelect = document.getElementById('group-by-select');
     dom.orderBySelect = document.getElementById('order-by-select');
     dom.searchInput = document.getElementById('sidebar-search');
@@ -196,6 +198,9 @@ export const state = {
     // Status colors feature (always enabled)
     titleColorsEnabled: true,
     statusColors: false, // initialized in init based on titleColorsEnabled
+
+    // Hide tools feature (off by default)
+    hideTools: localStorage.getItem('hideTools') === 'true',
 
     // Runtime state
     autoSwitchDebounce: null,
