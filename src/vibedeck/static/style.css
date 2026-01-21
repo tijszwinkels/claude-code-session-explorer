@@ -1060,3 +1060,17 @@ details[open] > summary .tree-icon-folder::before {
 [data-theme="dark"] .switcher-btn.active {
     background: #333;
 }
+
+/* Hide tools mode - hides tool calls, tool results, and tool reply messages */
+body.hide-tools .tool-use,
+body.hide-tools .tool-result,
+body.hide-tools .file-tool,
+body.hide-tools .todo-list,
+body.hide-tools .message.tool-reply {
+    display: none !important;
+}
+
+/* Hide assistant messages that only contain tool elements (no visible text) */
+body.hide-tools .message.assistant:not(:has(.assistant-text)):not(:has(.thinking)) {
+    display: none !important;
+}

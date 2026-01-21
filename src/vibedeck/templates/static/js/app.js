@@ -3,7 +3,7 @@
 import { initDom, dom, state } from './state.js';
 import { copyToClipboard } from './utils.js';
 import {
-    initSidebar, initThemeToggle, initAutoSwitch, initStatusColors,
+    initSidebar, initThemeToggle, initAutoSwitch, initStatusColors, initHideTools,
     initAutoScroll, initScrollButtons, initUserNavigation, initSearch
 } from './ui.js';
 import { initPreviewPane } from './preview.js';
@@ -25,6 +25,7 @@ function init() {
     initThemeToggle();
     initAutoSwitch();
     initStatusColors();
+    initHideTools();
     initAutoScroll();
     initScrollButtons();
     initUserNavigation();

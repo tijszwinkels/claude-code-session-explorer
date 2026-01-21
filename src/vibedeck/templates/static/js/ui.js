@@ -149,6 +149,23 @@ export function initStatusColors() {
     }
 }
 
+// Hide tools UI
+export function updateHideToolsUI() {
+    state.hideTools = dom.hideToolsCheckbox.checked;
+    if (state.hideTools) {
+        document.body.classList.add('hide-tools');
+    } else {
+        document.body.classList.remove('hide-tools');
+    }
+    localStorage.setItem('hideTools', state.hideTools);
+}
+
+export function initHideTools() {
+    dom.hideToolsCheckbox.checked = state.hideTools;
+    dom.hideToolsCheckbox.addEventListener('change', updateHideToolsUI);
+    updateHideToolsUI();
+}
+
 // Auto-scroll UI (floating controls)
 export function updateAutoScrollUI() {
     state.autoScroll = dom.autoScrollCheckbox.checked;

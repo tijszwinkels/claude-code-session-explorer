@@ -388,6 +388,11 @@ def resolve_session_path(session_arg: str) -> Path:
     is_flag=True,
     help="Include the original session JSON in the output directory",
 )
+@click.option(
+    "--hide-tools",
+    is_flag=True,
+    help="Hide tool calls and results, showing only user/assistant conversation",
+)
 def html(
     session_file: str,
     output: Path | None,
@@ -396,6 +401,7 @@ def html(
     gist: bool,
     open_browser: bool,
     include_json: bool,
+    hide_tools: bool,
 ) -> None:
     """Export a session transcript to static HTML files.
 
@@ -435,7 +441,7 @@ def html(
 
     # Generate HTML
     try:
-        index_path = generate_html(session_path, output, github_repo=repo)
+        index_path = generate_html(session_path, output, github_repo=repo, hide_tools=hide_tools)
         click.echo(f"Generated: {output.resolve()}")
     except Exception as e:
         click.echo(f"Error generating HTML: {e}", err=True)
@@ -473,9 +479,15 @@ def html(
     type=click.Path(path_type=Path),
     help="Output file path. Use trailing slash for auto-named file in directory. Omit for stdout.",
 )
+@click.option(
+    "--hide-tools",
+    is_flag=True,
+    help="Hide tool calls and results, showing only user/assistant conversation",
+)
 def md(
     session_file: str,
     output: Path | None,
+    hide_tools: bool,
 ) -> None:
     """Export a session transcript to Markdown.
 
@@ -495,7 +507,7 @@ def md(
     session_path = resolve_session_path(session_file)
 
     try:
-        result = export_markdown(session_path, output)
+        result = export_markdown(session_path, output, hide_tools=hide_tools)
         if output is None:
             # Output to stdout
             click.echo(result, nl=False)
