@@ -906,8 +906,8 @@ export function openUrlPane(url) {
     const iframe = document.createElement('iframe');
     iframe.className = 'url-preview-iframe';
     iframe.src = url;
-    // Restricted sandbox - no forms, popups, or navigation
-    iframe.sandbox = 'allow-scripts allow-same-origin';
+    // Restricted sandbox - no same-origin to prevent access to VibeDeck's storage
+    iframe.sandbox = 'allow-scripts';
 
     // Handle load errors (note: iframe onerror doesn't fire for HTTP errors)
     iframe.onerror = function() {
@@ -952,4 +952,7 @@ function renderHtmlPreview(filePath) {
     };
 
     dom.previewContent.appendChild(iframe);
+
+    // Open pane
+    openRightPane();
 }
