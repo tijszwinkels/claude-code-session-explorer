@@ -911,8 +911,8 @@ export function processNewElement(element) {
     element.querySelectorAll('.truncatable').forEach(function(wrapper) {
         const content = wrapper.querySelector('.truncatable-content');
         const btn = wrapper.querySelector('.expand-btn');
-        if (content && btn && content.scrollHeight > 250) {
-            wrapper.classList.add('truncated');
+        if (content && btn) {
+            // Always set up the click handler
             btn.addEventListener('click', function() {
                 if (wrapper.classList.contains('truncated')) {
                     wrapper.classList.remove('truncated');
@@ -922,6 +922,12 @@ export function processNewElement(element) {
                     wrapper.classList.remove('expanded');
                     wrapper.classList.add('truncated');
                     btn.textContent = 'Show more';
+                }
+            });
+            // Use requestAnimationFrame to check scrollHeight after layout
+            requestAnimationFrame(function() {
+                if (content.scrollHeight > 250) {
+                    wrapper.classList.add('truncated');
                 }
             });
         }
