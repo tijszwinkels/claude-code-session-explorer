@@ -185,6 +185,13 @@ def _resolve_cwd(cwd_param: str | None, info) -> Path:
         # Find the git root from this path
         git_root = _get_git_root(target)
         if git_root:
+            # Security: also validate git root is within home directory
+            try:
+                git_root.resolve().relative_to(Path.home())
+            except ValueError:
+                raise HTTPException(
+                    status_code=403, detail="Git root must be within home directory"
+                )
             return git_root
         return target
     elif info.project_path:
