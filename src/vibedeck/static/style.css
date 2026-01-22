@@ -197,7 +197,7 @@ pre code { background: none; padding: 0; }
 
 .session-item { display: flex; align-items: center; padding: 4px 12px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; }
 .session-item:hover { background: rgba(0,0,0,0.04); color: var(--text-color); }
-.session-item.active { background: rgba(25, 118, 210, 0.08); color: var(--user-border); border-left-color: var(--user-border); font-weight: 500; }
+.session-item.active { background: rgba(25, 118, 210, 0.12); color: var(--user-border); border-left: 4px solid var(--user-border); border-right: 4px solid var(--user-border); font-weight: 500; box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15), inset 4px 0 8px -4px rgba(25, 118, 210, 0.3), inset -4px 0 8px -4px rgba(25, 118, 210, 0.3); margin-left: 2px; margin-right: 2px; border-radius: 4px; }
 .session-item.pending { font-style: italic; opacity: 0.7; }
 .session-item .session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-item .unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--user-border); flex-shrink: 0; margin-right: 6px; display: none; }
@@ -222,6 +222,7 @@ pre code { background: none; padding: 0; }
 .session-item.session-mode .unread-dot { position: absolute; left: 8px; top: 50%; margin-top: -4px; margin-right: 0; }
 .session-item.session-mode.running .unread-dot { margin-top: -5px; }
 .session-item.session-mode .close-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); margin-left: 0; }
+.session-item.session-mode.active { border-left: 4px solid var(--user-border); border-right: 4px solid var(--user-border); border-radius: 6px; margin-left: 4px; margin-right: 4px; }
 
 /* Top-level date sections in session mode */
 .project-list.session-mode > .date-section { margin-bottom: 4px; }
@@ -463,6 +464,7 @@ body { padding-top: 56px; padding-bottom: 100px; }
 [data-theme="dark"] .modal-btn-cancel:hover { background: #3d3d3d; }
 [data-theme="dark"] .project-header:hover { background: rgba(255,255,255,0.04); }
 [data-theme="dark"] .session-item:hover { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .session-item.active { background: rgba(25, 118, 210, 0.2); box-shadow: 0 2px 8px rgba(25, 118, 210, 0.25), inset 4px 0 8px -4px rgba(25, 118, 210, 0.4), inset -4px 0 8px -4px rgba(25, 118, 210, 0.4); }
 [data-theme="dark"] .session-item.session-mode { background: rgba(255,255,255,0.04); }
 [data-theme="dark"] .session-item.session-mode:hover { background: rgba(255,255,255,0.08); }
 [data-theme="dark"] .status-colors-enabled .session-item.status-done { background: rgba(76, 175, 80, 0.15); }
