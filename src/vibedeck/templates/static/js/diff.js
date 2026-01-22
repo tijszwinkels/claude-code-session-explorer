@@ -125,11 +125,11 @@ export async function openDiffView(selectFilePath = null) {
     // We need to find the git root from the file path
     let cwdParam = '';
     if (selectFilePath) {
-        // Extract directory from file path and use it as cwd hint
-        const dir = selectFilePath.substring(0, selectFilePath.lastIndexOf('/'));
-        if (dir) {
-            cwdParam = `?cwd=${encodeURIComponent(dir)}`;
-        }
+        // The path could be a file path or a directory path
+        // For files: extract the directory part
+        // For directories: use as-is
+        // The backend will resolve the git root from whatever we pass
+        cwdParam = `?cwd=${encodeURIComponent(selectFilePath)}`;
     }
 
     // Open the right pane

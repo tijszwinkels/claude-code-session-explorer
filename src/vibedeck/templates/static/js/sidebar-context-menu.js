@@ -3,7 +3,8 @@
 import { state } from './state.js';
 import { copyToClipboard } from './utils.js';
 import { loadFileTree, openRightPane } from './filetree.js';
-import { archiveSession, unarchiveSession } from './sessions.js';
+import { archiveSession, unarchiveSession, switchToSession } from './sessions.js';
+import { openDiffView } from './diff.js';
 
 let sidebarContextMenu = null;
 let currentMenuType = null; // 'project' or 'session'
@@ -68,7 +69,14 @@ export function showSessionContextMenu(e, sessionId) {
 
     // Build menu items for session
     const isArchived = state.archivedSessionIds.has(sessionId);
-    let menuItems = `<button class="context-menu-item" data-action="trigger-summary">Trigger summary</button>`;
+    let menuItems = '';
+
+    // View diff option (if session has a project path)
+    if (session.cwd) {
+        menuItems += `<button class="context-menu-item" data-action="view-diff">View diff</button>`;
+    }
+
+    menuItems += `<button class="context-menu-item" data-action="trigger-summary">Trigger summary</button>`;
 
     if (isArchived) {
         menuItems += `<button class="context-menu-item" data-action="unarchive">Unarchive session</button>`;
@@ -131,7 +139,9 @@ function handleProjectAction(action) {
 async function handleSessionAction(action) {
     if (!currentMenuData || !currentMenuData.sessionId) return;
 
-    if (action === 'trigger-summary') {
+    if (action === 'view-diff') {
+        viewSessionDiff(currentMenuData.sessionId, currentMenuData.session);
+    } else if (action === 'trigger-summary') {
         await triggerSummary(currentMenuData.sessionId);
     } else if (action === 'archive') {
         archiveSession(currentMenuData.sessionId);
@@ -140,6 +150,35 @@ async function handleSessionAction(action) {
         unarchiveSession(currentMenuData.sessionId);
         showFlashMessage('Session unarchived', 'success');
     }
+}
+
+/**
+ * Open diff view for a session, determining the correct working directory.
+ * If the session has a branch that's not main/master, try to find the worktree.
+ */
+function viewSessionDiff(sessionId, session) {
+    if (!session.cwd) {
+        showFlashMessage('No project path for session', 'error');
+        return;
+    }
+
+    // Switch to the session first (diff view uses activeSessionId)
+    switchToSession(sessionId, false);
+
+    let diffPath = session.cwd;
+
+    // If session has a branch and it's not main/master, try worktree path
+    const branch = session.summaryBranch;
+    if (branch && branch !== 'main' && branch !== 'master') {
+        // Convention: worktrees are at {projectPath}/worktrees/{branch}
+        const worktreePath = `${session.cwd}/worktrees/${branch}`;
+        // Pass the worktree path - the backend will verify if it exists
+        diffPath = worktreePath;
+    }
+
+    // Open the diff view with the path to set the cwd
+    // The backend's _resolve_cwd will find the git root from this path
+    openDiffView(diffPath);
 }
 
 function showFlashMessage(message, type) {
