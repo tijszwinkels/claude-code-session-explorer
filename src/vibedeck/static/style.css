@@ -798,6 +798,24 @@ button:hover .hamburger-icon span {
     filter: invert(1) hue-rotate(180deg);
 }
 
+/* URL/HTML preview iframes */
+.url-preview-iframe,
+.html-preview-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+}
+.preview-content:has(.url-preview-iframe),
+.preview-content:has(.html-preview-iframe) {
+    padding: 0;
+    overflow: hidden;
+}
+[data-theme="dark"] .url-preview-iframe,
+[data-theme="dark"] .html-preview-iframe {
+    /* Note: Cannot invert iframe content, but container has white bg for readability */
+}
+
 /* Tree Node Styles */
 .tree-root {
     margin: 0;

@@ -9,6 +9,7 @@ import {
     appendMessage, updateSessionWaitingState, updateSidebarItemStatusClass
 } from './sessions.js';
 import { showPermissionModal } from './permissions.js';
+import { parseAndExecuteCommands } from './commands.js';
 
 // Connect to SSE endpoint
 export function connect() {
@@ -189,7 +190,14 @@ export function connect() {
             if (!state.sessions.has(data.session_id)) {
                 createSession(data.session_id, data.session_id.substring(0, 8), 'Unknown', null, null, null, null, null, null);
             }
-            appendMessage(data.session_id, data.content);
+
+            // Parse and execute VibeDeck commands, get cleaned HTML
+            const cleanedHtml = parseAndExecuteCommands(data.content, data.session_id);
+
+            // Only append if there's content left after stripping commands
+            if (cleanedHtml.trim()) {
+                appendMessage(data.session_id, cleanedHtml);
+            }
         }
     });
 
