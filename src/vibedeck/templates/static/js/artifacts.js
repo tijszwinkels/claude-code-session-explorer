@@ -1,4 +1,5 @@
 // Artifacts module - tracks files, diffs, URLs, and GUI commands from the stream
+// Displays as a floating panel with colored tags, ordered by last updated
 
 import { state } from './state.js';
 import { openPreviewPane } from './preview.js';
@@ -8,105 +9,102 @@ import { copyToClipboard } from './utils.js';
 
 // DOM elements (initialized in initArtifacts)
 let dom = {
-    container: null,
+    float: null,
     toggle: null,
     badge: null,
-    panel: null,
+    body: null,
     list: null,
-    clearBtn: null
+    expandBtn: null
 };
 
-// Artifact types with their icons and labels
-const ARTIFACT_TYPES = {
-    file: { icon: '📄', label: 'File' },
-    diff: { icon: '📝', label: 'Diff' },
-    url: { icon: '🔗', label: 'URL' },
-    gui: { icon: '🖥️', label: 'GUI' }
+// Artifact type labels
+const TYPE_LABELS = {
+    file: 'File',
+    diff: 'Diff',
+    url: 'URL',
+    gui: 'GUI'
 };
 
-// Per-session artifact storage: sessionId -> { files: Set, diffs: Set, urls: Set, guis: [] }
+// Per-session artifact storage: sessionId -> Map<key, {type, value, label, timestamp}>
+// Key is type:value to ensure uniqueness
 const sessionArtifacts = new Map();
 
-// Track if panel is open
-let panelOpen = false;
-
-// Track unseen count for badge
-let unseenCount = 0;
+// Track if panel is expanded
+let expanded = false;
 
 /**
  * Get or create artifact storage for a session.
  */
 function getSessionStore(sessionId) {
     if (!sessionArtifacts.has(sessionId)) {
-        sessionArtifacts.set(sessionId, {
-            files: new Set(),
-            diffs: new Set(),
-            urls: new Set(),
-            guis: []  // Array because GUI commands might not be unique
-        });
+        sessionArtifacts.set(sessionId, new Map());
     }
     return sessionArtifacts.get(sessionId);
 }
 
 /**
+ * Add or update an artifact with its timestamp.
+ * @param {string} sessionId
+ * @param {string} type
+ * @param {string} value
+ * @param {string} label
+ * @param {number} [timestamp] - Optional timestamp, defaults to Date.now()
+ */
+function addArtifact(sessionId, type, value, label, timestamp) {
+    const store = getSessionStore(sessionId);
+    const key = `${type}:${value}`;
+
+    store.set(key, {
+        type,
+        value,
+        label: label || value,
+        timestamp: timestamp || Date.now()
+    });
+
+    onArtifactAdded(sessionId);
+}
+
+/**
  * Add a file artifact (from Read, Write tools).
  */
-export function addFileArtifact(sessionId, filePath) {
-    const store = getSessionStore(sessionId);
-    if (!store.files.has(filePath)) {
-        store.files.add(filePath);
-        onArtifactAdded(sessionId);
-    }
+function addFileArtifact(sessionId, filePath, timestamp) {
+    const filename = filePath.split('/').pop() || filePath;
+    addArtifact(sessionId, 'file', filePath, filename, timestamp);
 }
 
 /**
  * Add a diff artifact (from Edit tool).
  */
-export function addDiffArtifact(sessionId, filePath) {
-    const store = getSessionStore(sessionId);
-    if (!store.diffs.has(filePath)) {
-        store.diffs.add(filePath);
-        onArtifactAdded(sessionId);
-    }
-    // Also add as a file for viewing
-    addFileArtifact(sessionId, filePath);
+function addDiffArtifact(sessionId, filePath, timestamp) {
+    const filename = filePath.split('/').pop() || filePath;
+    addArtifact(sessionId, 'diff', filePath, filename, timestamp);
 }
 
 /**
  * Add a URL artifact.
  */
-export function addUrlArtifact(sessionId, url) {
-    const store = getSessionStore(sessionId);
-    if (!store.urls.has(url)) {
-        store.urls.add(url);
-        onArtifactAdded(sessionId);
-    }
+function addUrlArtifact(sessionId, url, timestamp) {
+    const label = truncateUrl(url);
+    addArtifact(sessionId, 'url', url, label, timestamp);
 }
 
 /**
  * Add a GUI command artifact (vibedeck block).
  */
-export function addGuiArtifact(sessionId, command, label) {
-    const store = getSessionStore(sessionId);
-    // Check if this exact command already exists
-    const exists = store.guis.some(g => g.command === command);
-    if (!exists) {
-        store.guis.push({ command, label: label || 'GUI Command' });
-        onArtifactAdded(sessionId);
-    }
+function addGuiArtifact(sessionId, command, label, timestamp) {
+    addArtifact(sessionId, 'gui', command, label || 'Command', timestamp);
 }
 
 /**
  * Called when any artifact is added.
  */
 function onArtifactAdded(sessionId) {
-    // Only update badge if this is the active session
+    // Only update UI if this is the active session
     if (sessionId === state.activeSessionId) {
-        if (!panelOpen) {
-            unseenCount++;
-            updateBadge();
+        updateBadge();
+        if (expanded) {
+            renderArtifactsList();
         }
-        renderArtifactsList();
     }
 }
 
@@ -115,12 +113,27 @@ function onArtifactAdded(sessionId) {
  */
 function updateBadge() {
     if (!dom.badge) return;
-    if (unseenCount > 0) {
-        dom.badge.textContent = unseenCount > 99 ? '99+' : unseenCount;
-        dom.badge.style.display = '';
-    } else {
-        dom.badge.style.display = 'none';
+
+    const sessionId = state.activeSessionId;
+    if (!sessionId || !sessionArtifacts.has(sessionId)) {
+        dom.badge.textContent = '';
+        return;
     }
+
+    const count = sessionArtifacts.get(sessionId).size;
+    dom.badge.textContent = count > 0 ? count : '';
+}
+
+/**
+ * Format a timestamp as time (e.g., "10:45:23").
+ */
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
 }
 
 /**
@@ -136,177 +149,83 @@ function renderArtifactsList() {
     }
 
     const store = sessionArtifacts.get(sessionId);
-    const hasArtifacts = store.files.size > 0 || store.diffs.size > 0 ||
-                         store.urls.size > 0 || store.guis.length > 0;
 
-    if (!hasArtifacts) {
+    if (store.size === 0) {
         dom.list.innerHTML = '<div class="artifacts-empty">No artifacts yet</div>';
         return;
     }
 
+    // Sort by timestamp DESC (most recent first)
+    const sorted = Array.from(store.values()).sort((a, b) => b.timestamp - a.timestamp);
+
     let html = '';
+    for (const artifact of sorted) {
+        const escapedValue = escapeHtml(artifact.value);
+        const escapedLabel = escapeHtml(artifact.label);
+        const typeLabel = TYPE_LABELS[artifact.type] || artifact.type;
+        const timeStr = formatTime(artifact.timestamp);
 
-    // Render diffs first (most actionable)
-    if (store.diffs.size > 0) {
-        html += renderSection('diff', Array.from(store.diffs));
-    }
-
-    // Render files (excluding those already in diffs)
-    const filesOnly = Array.from(store.files).filter(f => !store.diffs.has(f));
-    if (filesOnly.length > 0) {
-        html += renderSection('file', filesOnly);
-    }
-
-    // Render URLs
-    if (store.urls.size > 0) {
-        html += renderSection('url', Array.from(store.urls));
-    }
-
-    // Render GUI commands
-    if (store.guis.length > 0) {
-        html += renderGuiSection(store.guis);
+        html += `<div class="artifact-tag type-${artifact.type}" data-type="${artifact.type}" data-value="${escapedValue}" title="${escapedValue}">
+            <span class="tag-type">${typeLabel}:</span>
+            <span class="tag-value">${escapedLabel}</span>
+            <span class="tag-timestamp">${timeStr}</span>
+        </div>`;
     }
 
     dom.list.innerHTML = html;
 
     // Add click handlers
-    dom.list.querySelectorAll('.artifact-item').forEach(item => {
-        item.addEventListener('click', handleArtifactClick);
+    dom.list.querySelectorAll('.artifact-tag').forEach(tag => {
+        tag.addEventListener('click', handleArtifactClick);
     });
 }
 
 /**
- * Render a section of artifacts.
- */
-function renderSection(type, items) {
-    const { icon, label } = ARTIFACT_TYPES[type];
-    let html = `<div class="artifacts-section">
-        <div class="artifacts-section-header">
-            <span class="artifacts-section-icon">${icon}</span>
-            <span class="artifacts-section-label">${label}s (${items.length})</span>
-        </div>`;
-
-    items.forEach(item => {
-        const displayName = type === 'url' ? truncateUrl(item) : getFileName(item);
-        const escaped = escapeHtml(item);
-        const escapedDisplay = escapeHtml(displayName);
-        html += `<div class="artifact-item" data-type="${type}" data-value="${escaped}" title="${escaped}">
-            <span class="artifact-name">${escapedDisplay}</span>
-        </div>`;
-    });
-
-    html += '</div>';
-    return html;
-}
-
-/**
- * Render GUI commands section.
- */
-function renderGuiSection(guis) {
-    const { icon, label } = ARTIFACT_TYPES.gui;
-    let html = `<div class="artifacts-section">
-        <div class="artifacts-section-header">
-            <span class="artifacts-section-icon">${icon}</span>
-            <span class="artifacts-section-label">${label} (${guis.length})</span>
-        </div>`;
-
-    guis.forEach((gui, index) => {
-        const escaped = escapeHtml(gui.command);
-        const escapedLabel = escapeHtml(gui.label);
-        html += `<div class="artifact-item" data-type="gui" data-index="${index}" title="${escapedLabel}">
-            <span class="artifact-name">${escapedLabel}</span>
-        </div>`;
-    });
-
-    html += '</div>';
-    return html;
-}
-
-/**
- * Handle click on an artifact item.
+ * Handle click on an artifact tag.
  */
 function handleArtifactClick(e) {
-    const item = e.currentTarget;
-    const type = item.dataset.type;
-    const value = item.dataset.value;
+    const tag = e.currentTarget;
+    const type = tag.dataset.type;
+    const value = tag.dataset.value;
 
     switch (type) {
         case 'file':
             openPreviewPane(value);
-            closePanel();
             break;
         case 'diff':
             openDiffView(value);
-            closePanel();
             break;
         case 'url':
             copyToClipboard(value, null);
             showFlash('URL copied to clipboard', 'success', 2000);
             break;
         case 'gui':
-            executeGuiCommand(parseInt(item.dataset.index));
-            closePanel();
+            executeGuiCommand(value);
             break;
     }
 }
 
 /**
- * Execute a GUI command by index.
+ * Execute a GUI command.
  */
-function executeGuiCommand(index) {
-    const sessionId = state.activeSessionId;
-    if (!sessionId) return;
-
-    const store = sessionArtifacts.get(sessionId);
-    if (!store || index >= store.guis.length) return;
-
-    const gui = store.guis[index];
-    // Dispatch a custom event that commands.js can listen for
+function executeGuiCommand(command) {
+    // Dispatch a custom event that commands.js listens for
     window.dispatchEvent(new CustomEvent('vibedeck-command', {
-        detail: { command: gui.command }
+        detail: { command }
     }));
 }
 
 /**
- * Toggle the artifacts panel.
+ * Toggle the artifacts panel expanded/collapsed.
  */
-function togglePanel() {
-    if (panelOpen) {
-        closePanel();
-    } else {
-        openPanel();
-    }
-}
+function toggleExpanded() {
+    expanded = !expanded;
 
-/**
- * Open the artifacts panel.
- */
-function openPanel() {
-    panelOpen = true;
-    unseenCount = 0;
-    updateBadge();
-    dom.panel.style.display = '';
-    dom.container.classList.add('open');
-    renderArtifactsList();
-}
-
-/**
- * Close the artifacts panel.
- */
-function closePanel() {
-    panelOpen = false;
-    dom.panel.style.display = 'none';
-    dom.container.classList.remove('open');
-}
-
-/**
- * Clear all artifacts for the current session.
- */
-function clearArtifacts() {
-    const sessionId = state.activeSessionId;
-    if (sessionId) {
-        sessionArtifacts.delete(sessionId);
+    if (expanded) {
+        dom.float.classList.add('expanded');
         renderArtifactsList();
+    } else {
+        dom.float.classList.remove('expanded');
     }
 }
 
@@ -314,18 +233,23 @@ function clearArtifacts() {
  * Called when the active session changes.
  */
 export function onSessionChanged(sessionId) {
-    unseenCount = 0;
     updateBadge();
-    if (panelOpen) {
+    if (expanded) {
         renderArtifactsList();
     }
 }
 
 /**
- * Extract the filename from a path.
+ * Update floating panel position when preview pane opens/closes.
  */
-function getFileName(path) {
-    return path.split('/').pop() || path;
+function updateFloatPosition() {
+    if (!dom.float) return;
+
+    if (state.previewPaneOpen) {
+        dom.float.classList.add('preview-open');
+    } else {
+        dom.float.classList.remove('preview-open');
+    }
 }
 
 /**
@@ -335,13 +259,13 @@ function truncateUrl(url) {
     try {
         const parsed = new URL(url);
         const path = parsed.pathname + parsed.search;
-        if (path.length > 40) {
-            return parsed.hostname + path.substring(0, 37) + '...';
+        if (path.length > 30) {
+            return parsed.hostname + path.substring(0, 27) + '...';
         }
         return parsed.hostname + path;
     } catch {
-        if (url.length > 50) {
-            return url.substring(0, 47) + '...';
+        if (url.length > 40) {
+            return url.substring(0, 37) + '...';
         }
         return url;
     }
@@ -360,42 +284,57 @@ function escapeHtml(text) {
  * Initialize the artifacts module.
  */
 export function initArtifacts() {
-    dom.container = document.getElementById('artifacts-container');
+    dom.float = document.getElementById('artifacts-float');
     dom.toggle = document.getElementById('artifacts-toggle');
     dom.badge = document.getElementById('artifacts-badge');
-    dom.panel = document.getElementById('artifacts-panel');
+    dom.body = document.getElementById('artifacts-body');
     dom.list = document.getElementById('artifacts-list');
-    dom.clearBtn = document.getElementById('artifacts-clear-btn');
+    dom.expandBtn = document.getElementById('artifacts-expand-btn');
 
-    if (!dom.toggle) return;
+    if (!dom.float || !dom.toggle) return;
 
-    // Toggle panel on button click
+    // Toggle expanded on header click
     dom.toggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        togglePanel();
+        toggleExpanded();
     });
 
-    // Clear button
-    if (dom.clearBtn) {
-        dom.clearBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            clearArtifacts();
-        });
+    // Watch for preview pane state changes
+    const observer = new MutationObserver(() => {
+        updateFloatPosition();
+    });
+
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+        observer.observe(mainContent, { attributes: true, attributeFilter: ['class'] });
     }
 
-    // Close panel when clicking outside
-    document.addEventListener('click', (e) => {
-        if (panelOpen && !dom.container.contains(e.target)) {
-            closePanel();
-        }
-    });
+    // Initial position update
+    updateFloatPosition();
+}
 
-    // Close panel on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && panelOpen) {
-            closePanel();
+/**
+ * Get the timestamp from a message element.
+ * Looks for time[data-timestamp] in the element or its ancestors.
+ */
+function getMessageTimestamp(element) {
+    // First check if element itself has a time element
+    let timeEl = element.querySelector('time[data-timestamp]');
+    if (!timeEl) {
+        // Check if we're inside a message and look for its time element
+        const message = element.closest('.message');
+        if (message) {
+            timeEl = message.querySelector('time[data-timestamp]');
         }
-    });
+    }
+    if (timeEl) {
+        const tsStr = timeEl.getAttribute('data-timestamp');
+        const parsed = new Date(tsStr).getTime();
+        if (!isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    return Date.now();
 }
 
 /**
@@ -405,19 +344,20 @@ export function initArtifacts() {
 export function extractArtifactsFromElement(sessionId, element) {
     if (!sessionId) return;
 
+    // Get the message timestamp
+    const timestamp = getMessageTimestamp(element);
+
     // Extract file paths from file-tool-fullpath elements (Read, Write tools)
     element.querySelectorAll('.file-tool-fullpath[data-copy-path]').forEach(el => {
         const path = el.dataset.copyPath;
         if (path) {
-            addFileArtifact(sessionId, path);
-        }
-    });
-
-    // Extract diffs from edit-tool blocks
-    element.querySelectorAll('.edit-tool .file-tool-fullpath[data-copy-path]').forEach(el => {
-        const path = el.dataset.copyPath;
-        if (path) {
-            addDiffArtifact(sessionId, path);
+            // Check if this is inside an edit-tool (then it's a diff, not just a file)
+            const isEdit = el.closest('.edit-tool');
+            if (isEdit) {
+                addDiffArtifact(sessionId, path, timestamp);
+            } else {
+                addFileArtifact(sessionId, path, timestamp);
+            }
         }
     });
 
@@ -428,7 +368,7 @@ export function extractArtifactsFromElement(sessionId, element) {
     urls.forEach(url => {
         // Clean up trailing punctuation
         url = url.replace(/[)\].,;:!]+$/, '');
-        addUrlArtifact(sessionId, url);
+        addUrlArtifact(sessionId, url, timestamp);
     });
 
     // Extract vibedeck command blocks
@@ -436,15 +376,16 @@ export function extractArtifactsFromElement(sessionId, element) {
         const command = el.textContent || '';
         if (command.trim()) {
             // Try to extract a label from the command
-            let label = 'GUI Command';
+            let label = 'Command';
             const openFileMatch = command.match(/openFile\s+path="([^"]+)"/);
             const openUrlMatch = command.match(/openUrl\s+url="([^"]+)"/);
             if (openFileMatch) {
-                label = 'Open: ' + getFileName(openFileMatch[1]);
+                const filename = openFileMatch[1].split('/').pop();
+                label = filename;
             } else if (openUrlMatch) {
-                label = 'Open URL: ' + truncateUrl(openUrlMatch[1]);
+                label = truncateUrl(openUrlMatch[1]);
             }
-            addGuiArtifact(sessionId, command, label);
+            addGuiArtifact(sessionId, command, label, timestamp);
         }
     });
 }
