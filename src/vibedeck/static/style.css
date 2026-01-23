@@ -1461,3 +1461,189 @@ body.hide-tools .message.assistant:not(:has(.assistant-text)):not(:has(.thinking
 .edit-tool:active {
     transform: scale(0.995);
 }
+
+/* ===== Floating Artifacts Panel ===== */
+
+.artifacts-float {
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    z-index: 100;
+    background: var(--bg-color, #fff);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    min-width: 220px;
+    max-width: 650px;
+    transition: box-shadow 0.2s;
+}
+.artifacts-float:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+[data-theme="dark"] .artifacts-float {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+[data-theme="dark"] .artifacts-float:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+/* Adjust position when preview pane is open */
+.preview-open ~ .artifacts-float,
+.artifacts-float.preview-open {
+    right: calc(var(--preview-pane-width, 700px) + 20px);
+}
+
+.artifacts-float .artifacts-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 8px;
+}
+.artifacts-float.expanded .artifacts-header {
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 8px 8px 0 0;
+}
+
+.artifacts-float .artifacts-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.artifacts-float .artifacts-badge {
+    background: #2196f3;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+.artifacts-float .artifacts-badge:empty {
+    display: none;
+}
+
+.artifacts-float .artifacts-expand-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 2px;
+    margin-left: auto;
+    transition: transform 0.2s;
+}
+.artifacts-float.expanded .artifacts-expand-btn {
+    transform: rotate(180deg);
+}
+
+.artifacts-float .artifacts-body {
+    display: none;
+    width: 350px;
+    height: 600px;
+    overflow-y: auto;
+    resize: both;
+    min-width: 200px;
+    min-height: 100px;
+    max-height: 80vh;
+}
+.artifacts-float.expanded .artifacts-body {
+    display: block;
+}
+
+.artifacts-float .artifacts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+}
+
+.artifacts-float .artifacts-empty {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 12px;
+    text-align: center;
+}
+
+/* Artifact tags - colored boxes */
+.artifact-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: filter 0.1s, transform 0.1s;
+}
+.artifact-tag:hover {
+    filter: brightness(0.95);
+    transform: translateY(-1px);
+}
+.artifact-tag:active {
+    transform: translateY(0);
+}
+
+.artifact-tag .tag-type {
+    font-weight: 600;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
+.artifact-tag .tag-value {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.artifact-tag .tag-timestamp {
+    font-size: 0.65rem;
+    opacity: 0.6;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+/* Type-specific colors */
+.artifact-tag.type-file {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+[data-theme="dark"] .artifact-tag.type-file {
+    background: #1e3a5f;
+    color: #90caf9;
+}
+
+.artifact-tag.type-diff {
+    background: #fff3e0;
+    color: #e65100;
+}
+[data-theme="dark"] .artifact-tag.type-diff {
+    background: #4a2c00;
+    color: #ffb74d;
+}
+
+.artifact-tag.type-url {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+[data-theme="dark"] .artifact-tag.type-url {
+    background: #1b3d1f;
+    color: #81c784;
+}
+
+.artifact-tag.type-gui {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+[data-theme="dark"] .artifact-tag.type-gui {
+    background: #3d1f47;
+    color: #ce93d8;
+}
