@@ -149,8 +149,15 @@ export async function openDiffView(selectFilePath = null) {
     try {
         const response = await fetch(`/api/diff/session/${state.activeSessionId}/files${cwdParam}`);
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to load diff');
+            let errorMessage = 'Failed to load diff';
+            try {
+                const error = await response.json();
+                errorMessage = error.detail || errorMessage;
+            } catch {
+                // Response wasn't JSON, use status text
+                errorMessage = response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -342,8 +349,15 @@ export async function openFileDiff(filePath) {
 
         const response = await fetch(url);
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to load file diff');
+            let errorMessage = 'Failed to load file diff';
+            try {
+                const error = await response.json();
+                errorMessage = error.detail || errorMessage;
+            } catch {
+                // Response wasn't JSON, use status text
+                errorMessage = response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
