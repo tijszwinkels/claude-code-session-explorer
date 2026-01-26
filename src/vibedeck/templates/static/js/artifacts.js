@@ -83,11 +83,28 @@ function addDiffArtifact(sessionId, filePath, timestamp, messageId) {
 }
 
 /**
+ * Normalize a URL to ensure it has a protocol.
+ * Prefers https:// but falls back to http:// for localhost/127.0.0.1.
+ */
+function normalizeUrl(url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
+    }
+    // For localhost and 127.0.0.1, use http://
+    if (url.startsWith('localhost') || url.startsWith('127.0.0.1')) {
+        return 'http://' + url;
+    }
+    // For everything else, prefer https://
+    return 'https://' + url;
+}
+
+/**
  * Add a URL artifact.
  */
 function addUrlArtifact(sessionId, url, timestamp, messageId) {
-    const label = truncateUrl(url);
-    addArtifact(sessionId, 'url', url, label, timestamp, messageId);
+    const normalizedUrl = normalizeUrl(url);
+    const label = truncateUrl(normalizedUrl);
+    addArtifact(sessionId, 'url', normalizedUrl, label, timestamp, messageId);
 }
 
 /**
@@ -393,9 +410,16 @@ export function extractArtifactsFromElement(sessionId, element) {
 
     // Extract URLs from the text content
     const textContent = element.textContent || '';
-    const urlPattern = /https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+/gi;
-    const urls = textContent.match(urlPattern) || [];
-    urls.forEach(url => {
+    // Match URLs with protocol (http:// or https://)
+    const urlWithProtocol = /https?:\/\/[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+/gi;
+    // Match localhost:port or 127.0.0.1:port URLs without protocol
+    const localhostPattern = /(?:localhost|127\.0\.0\.1):\d+[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*/gi;
+
+    const urlsWithProtocol = textContent.match(urlWithProtocol) || [];
+    const localhostUrls = textContent.match(localhostPattern) || [];
+    const allUrls = [...urlsWithProtocol, ...localhostUrls];
+
+    allUrls.forEach(url => {
         // Clean up trailing punctuation
         url = url.replace(/[)\].,;:!]+$/, '');
         addUrlArtifact(sessionId, url, timestamp, messageId);
