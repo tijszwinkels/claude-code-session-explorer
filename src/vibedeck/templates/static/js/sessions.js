@@ -40,10 +40,41 @@ function findFallbackSessionId() {
     return null;
 }
 
-export function updateSidebarItemStatusClass(sidebarItem, title) {
+// Map persisted status value to CSS class
+function getStatusClassFromPersistedValue(status) {
+    switch (status) {
+        case 'done': return 'status-done';
+        case 'waiting': return 'status-waiting';
+        case 'in_progress': return 'status-in-progress';
+        default: return '';
+    }
+}
+
+// Apply status to a sidebar item, updating visual state
+function applyStatusToSidebarItem(sidebarItem, statusClass) {
+    sidebarItem.classList.remove('status-done', 'status-waiting', 'status-in-progress');
+    if (statusClass) {
+        sidebarItem.classList.add(statusClass);
+    }
+}
+
+export function updateSidebarItemStatusClass(sidebarItem, title, sessionId = null) {
     // Remove existing status classes
     sidebarItem.classList.remove('status-done', 'status-waiting', 'status-in-progress');
-    // Add new status class if applicable
+
+    // Check for persisted status first (takes priority over title-parsed status)
+    if (sessionId) {
+        const persistedStatus = state.sessionStatuses.get(sessionId);
+        if (persistedStatus) {
+            const statusClass = getStatusClassFromPersistedValue(persistedStatus);
+            if (statusClass) {
+                sidebarItem.classList.add(statusClass);
+            }
+            return;  // Don't fall through to title parsing
+        }
+    }
+
+    // Fall back to parsing status from title
     const status = parseStatusFromTitle(title);
     const statusClass = getStatusClass(status);
     if (statusClass) {
@@ -211,7 +242,7 @@ export function createSession(sessionId, name, projectName, firstMessage, starte
     `;
 
     // Apply status color based on title suffix (e.g., "- Merged", "- Waiting for Input")
-    updateSidebarItemStatusClass(sidebarItem, summaryTitle);
+    updateSidebarItemStatusClass(sidebarItem, summaryTitle, sessionId);
 
     sidebarItem.addEventListener('click', function(e) {
         if (e.target.classList.contains('close-btn')) {
@@ -256,8 +287,9 @@ export function createSession(sessionId, name, projectName, firstMessage, starte
         dateSection.listElement.appendChild(sidebarItem);
     }
 
-    // Check if this session is archived
-    const isArchived = state.archivedSessionIds.has(sessionId);
+    // Check if this session is archived (either individually or via project)
+    const isArchived = state.archivedSessionIds.has(sessionId) ||
+                       (projectPath && state.archivedProjectPaths.has(projectPath));
     if (isArchived) {
         sidebarItem.classList.add('archived');
     }
@@ -437,6 +469,203 @@ export async function loadArchivedSessions() {
     }
 }
 
+// Load session statuses from server on init
+export async function loadSessionStatuses() {
+    try {
+        const response = await fetch('/api/session-statuses');
+        const data = await response.json();
+        state.sessionStatuses = new Map(Object.entries(data.statuses || {}));
+
+        // Apply statuses to already-loaded sessions
+        for (const [sessionId, status] of state.sessionStatuses) {
+            const session = state.sessions.get(sessionId);
+            if (session) {
+                const statusClass = getStatusClassFromPersistedValue(status);
+                applyStatusToSidebarItem(session.sidebarItem, statusClass);
+            }
+        }
+    } catch (err) {
+        console.error('Failed to load session statuses:', err);
+    }
+}
+
+// Set session status (with optimistic update and rollback)
+export async function setSessionStatus(sessionId, status) {
+    const session = state.sessions.get(sessionId);
+    if (!session) return;
+
+    // Store previous state for rollback
+    const previousStatus = state.sessionStatuses.get(sessionId);
+
+    // Optimistic update
+    if (status === null) {
+        state.sessionStatuses.delete(sessionId);
+    } else {
+        state.sessionStatuses.set(sessionId, status);
+    }
+
+    // Apply visual update
+    const statusClass = status ? getStatusClassFromPersistedValue(status) : '';
+    applyStatusToSidebarItem(session.sidebarItem, statusClass);
+
+    // If clearing status, fall back to title-parsed status
+    if (!status && session.summaryTitle) {
+        updateSidebarItemStatusClass(session.sidebarItem, session.summaryTitle, sessionId);
+    }
+
+    // Persist to server
+    try {
+        const response = await fetch('/api/session-statuses/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, status: status })
+        });
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (err) {
+        console.error('Failed to set session status:', err);
+        // Rollback state
+        if (previousStatus === undefined) {
+            state.sessionStatuses.delete(sessionId);
+        } else {
+            state.sessionStatuses.set(sessionId, previousStatus);
+        }
+        // Rollback visual state
+        const rollbackClass = previousStatus ? getStatusClassFromPersistedValue(previousStatus) : '';
+        applyStatusToSidebarItem(session.sidebarItem, rollbackClass);
+        if (!previousStatus && session.summaryTitle) {
+            updateSidebarItemStatusClass(session.sidebarItem, session.summaryTitle, sessionId);
+        }
+    }
+}
+
+// Load archived projects from server on init
+export async function loadArchivedProjects() {
+    try {
+        const response = await fetch('/api/archived-projects');
+        const data = await response.json();
+        state.archivedProjectPaths = new Set(data.archived_projects || []);
+
+        // Mark sessions from archived projects as archived
+        for (const [sessionId, session] of state.sessions) {
+            if (isSessionInArchivedProject(session)) {
+                session.archived = true;
+                session.sidebarItem.classList.add('archived');
+            }
+        }
+    } catch (err) {
+        console.error('Failed to load archived projects:', err);
+    }
+}
+
+// Check if a session belongs to an archived project
+export function isSessionInArchivedProject(session) {
+    if (!session.cwd) return false;
+    return state.archivedProjectPaths.has(session.cwd);
+}
+
+// Archive a project (with optimistic update and rollback)
+export async function archiveProject(projectPath) {
+    if (!projectPath) return;
+
+    // Store previous state for rollback
+    const wasArchived = state.archivedProjectPaths.has(projectPath);
+
+    // Optimistic update
+    state.archivedProjectPaths.add(projectPath);
+
+    // Mark all sessions in this project as archived
+    const affectedSessions = [];
+    for (const [sessionId, session] of state.sessions) {
+        if (session.cwd === projectPath && !state.archivedSessionIds.has(sessionId)) {
+            affectedSessions.push({ sessionId, wasArchived: session.archived });
+            session.archived = true;
+            session.sidebarItem.classList.add('archived');
+        }
+    }
+    reorderSidebar();
+
+    // Persist to server
+    try {
+        const response = await fetch('/api/archived-projects/archive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_path: projectPath })
+        });
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (err) {
+        console.error('Failed to archive project:', err);
+        // Rollback state
+        if (!wasArchived) {
+            state.archivedProjectPaths.delete(projectPath);
+        }
+        // Rollback session states
+        for (const { sessionId, wasArchived } of affectedSessions) {
+            const session = state.sessions.get(sessionId);
+            if (session) {
+                session.archived = wasArchived;
+                if (!wasArchived) {
+                    session.sidebarItem.classList.remove('archived');
+                }
+            }
+        }
+        reorderSidebar();
+    }
+}
+
+// Unarchive a project (with optimistic update and rollback)
+export async function unarchiveProject(projectPath) {
+    if (!projectPath) return;
+
+    // Store previous state for rollback
+    const wasArchived = state.archivedProjectPaths.has(projectPath);
+    if (!wasArchived) return;
+
+    // Optimistic update
+    state.archivedProjectPaths.delete(projectPath);
+
+    // Unarchive sessions in this project (unless individually archived)
+    const affectedSessions = [];
+    for (const [sessionId, session] of state.sessions) {
+        if (session.cwd === projectPath && !state.archivedSessionIds.has(sessionId)) {
+            affectedSessions.push({ sessionId, wasArchived: session.archived });
+            session.archived = false;
+            session.sidebarItem.classList.remove('archived');
+        }
+    }
+    reorderSidebar();
+
+    // Persist to server
+    try {
+        const response = await fetch('/api/archived-projects/unarchive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_path: projectPath })
+        });
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+    } catch (err) {
+        console.error('Failed to unarchive project:', err);
+        // Rollback state
+        state.archivedProjectPaths.add(projectPath);
+        // Rollback session states
+        for (const { sessionId, wasArchived } of affectedSessions) {
+            const session = state.sessions.get(sessionId);
+            if (session) {
+                session.archived = wasArchived;
+                if (wasArchived) {
+                    session.sidebarItem.classList.add('archived');
+                }
+            }
+        }
+        reorderSidebar();
+    }
+}
+
 // Create top-level date sections for session mode
 function createDateSections() {
     if (state.dateSections) return state.dateSections;
@@ -522,7 +751,10 @@ function reorderSidebarSessionMode() {
 
     state.sessions.forEach(function(session) {
         // Archived sessions go to archived category regardless of date
-        if (state.archivedSessionIds.has(session.id)) {
+        // Sessions are archived if individually archived OR in an archived project
+        const isArchived = state.archivedSessionIds.has(session.id) ||
+                           (session.cwd && state.archivedProjectPaths.has(session.cwd));
+        if (isArchived) {
             sessionsByCategory[archivedCategory].push(session);
         } else {
             const category = getDateCategory(getSessionCategoryTimestamp(session, state.sortBy));
@@ -605,15 +837,21 @@ function reorderSidebarProjectMode() {
     // Collect archived sessions separately
     const archivedSessions = [];
 
+    // Helper to check if a session is archived (individually or via project)
+    function isSessionArchived(s) {
+        return state.archivedSessionIds.has(s.id) ||
+               (s.cwd && state.archivedProjectPaths.has(s.cwd));
+    }
+
     // Sort projects by most recent non-archived session (based on sort mode)
     const sortedProjects = Array.from(state.projects.values()).sort(function(a, b) {
         const aMax = Array.from(a.sessions)
             .map(id => state.sessions.get(id))
-            .filter(s => s && !state.archivedSessionIds.has(s.id))
+            .filter(s => s && !isSessionArchived(s))
             .reduce((max, s) => Math.max(max, getSessionSortTimestamp(s, state.sortBy)), 0);
         const bMax = Array.from(b.sessions)
             .map(id => state.sessions.get(id))
-            .filter(s => s && !state.archivedSessionIds.has(s.id))
+            .filter(s => s && !isSessionArchived(s))
             .reduce((max, s) => Math.max(max, getSessionSortTimestamp(s, state.sortBy)), 0);
         return bMax - aMax;
     });
@@ -629,7 +867,7 @@ function reorderSidebarProjectMode() {
             .map(id => state.sessions.get(id))
             .filter(s => s)
             .forEach(function(session) {
-                if (state.archivedSessionIds.has(session.id)) {
+                if (isSessionArchived(session)) {
                     archivedSessions.push(session);
                 } else {
                     const category = getDateCategory(getSessionCategoryTimestamp(session, state.sortBy));

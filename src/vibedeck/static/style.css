@@ -1027,6 +1027,47 @@ details[open] > summary .tree-icon-folder::before {
     border-top: 1px solid var(--border-color);
 }
 
+.context-menu-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    padding: 4px 14px 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.context-menu-item.selected {
+    background: rgba(25, 118, 210, 0.15);
+}
+
+.context-menu-item.selected::before {
+    content: '✓ ';
+}
+
+[data-theme="dark"] .context-menu-item.selected {
+    background: rgba(66, 165, 245, 0.2);
+}
+
+/* Status-specific colors for selected menu items */
+.context-menu-item.selected.status-done {
+    background: rgba(76, 175, 80, 0.20);
+}
+.context-menu-item.selected.status-waiting {
+    background: rgba(255, 193, 7, 0.25);
+}
+.context-menu-item.selected.status-in-progress {
+    background: rgba(33, 150, 243, 0.20);
+}
+
+[data-theme="dark"] .context-menu-item.selected.status-done {
+    background: rgba(76, 175, 80, 0.25);
+}
+[data-theme="dark"] .context-menu-item.selected.status-waiting {
+    background: rgba(255, 193, 7, 0.28);
+}
+[data-theme="dark"] .context-menu-item.selected.status-in-progress {
+    background: rgba(33, 150, 243, 0.25);
+}
+
 .context-menu-item-danger {
     color: #d32f2f;
 }

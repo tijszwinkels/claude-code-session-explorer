@@ -102,6 +102,31 @@ class ArchiveSessionRequest(BaseModel):
     session_id: str
 
 
+class SessionStatusesResponse(BaseModel):
+    """Response for session statuses list."""
+
+    statuses: dict[str, str]
+
+
+class SessionStatusRequest(BaseModel):
+    """Request body for setting session status."""
+
+    session_id: str
+    status: str | None  # "in_progress", "waiting", "done", or None to clear
+
+
+class ArchivedProjectsResponse(BaseModel):
+    """Response for archived projects list."""
+
+    archived_projects: list[str]
+
+
+class ArchiveProjectRequest(BaseModel):
+    """Request body for archiving/unarchiving a project."""
+
+    project_path: str
+
+
 # File extension to highlight.js language mapping
 EXTENSION_TO_LANGUAGE = {
     ".py": "python",

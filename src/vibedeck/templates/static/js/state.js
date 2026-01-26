@@ -178,6 +178,8 @@ export const state = {
     sessionStatus: new Map(), // session_id -> { running, queued_messages, waiting_for_input }
     sessionPreviewPaths: new Map(), // session_id -> file path (track open preview per session)
     archivedSessionIds: new Set(), // session_ids that are archived (loaded from server)
+    archivedProjectPaths: new Set(), // project paths that are archived (loaded from server)
+    sessionStatuses: new Map(), // session_id -> status string ("in_progress", "waiting", "done")
 
     // UI state
     activeSessionId: null,

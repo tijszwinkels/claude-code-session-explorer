@@ -167,8 +167,8 @@ export function connect() {
                     titleSpan.textContent = newDisplayTitle;
                 }
 
-                // Update status color based on title suffix
-                updateSidebarItemStatusClass(session.sidebarItem, data.summaryTitle);
+                // Update status color based on title suffix (persisted status takes priority)
+                updateSidebarItemStatusClass(session.sidebarItem, data.summaryTitle, data.session_id);
 
                 // Update session header title
                 const headerTitleSpan = session.container.querySelector('.session-title-display');

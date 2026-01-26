@@ -3,7 +3,7 @@
 import { state } from './state.js';
 import { copyToClipboard } from './utils.js';
 import { loadFileTree, openRightPane } from './filetree.js';
-import { archiveSession, unarchiveSession, switchToSession } from './sessions.js';
+import { archiveSession, unarchiveSession, switchToSession, setSessionStatus, archiveProject, unarchiveProject } from './sessions.js';
 import { openDiffView } from './diff.js';
 
 let sidebarContextMenu = null;
@@ -41,11 +41,18 @@ export function showProjectContextMenu(e, projectPath, projectName) {
     currentMenuData = { path: projectPath, name: projectName };
 
     // Build menu items for project
+    const isProjectArchived = projectPath && state.archivedProjectPaths.has(projectPath);
     let menuItems = '';
 
     if (projectPath) {
         menuItems += `<button class="context-menu-item" data-action="copy-path">Copy project directory</button>`;
         menuItems += `<button class="context-menu-item" data-action="open-file-browser">Open in file browser</button>`;
+        menuItems += `<div class="context-menu-divider"></div>`;
+        if (isProjectArchived) {
+            menuItems += `<button class="context-menu-item" data-action="unarchive-project">Unarchive project</button>`;
+        } else {
+            menuItems += `<button class="context-menu-item" data-action="archive-project">Archive project</button>`;
+        }
     } else {
         menuItems += `<button class="context-menu-item" disabled>No project path available</button>`;
     }
@@ -69,6 +76,8 @@ export function showSessionContextMenu(e, sessionId) {
 
     // Build menu items for session
     const isArchived = state.archivedSessionIds.has(sessionId);
+    const isProjectArchived = session.cwd && state.archivedProjectPaths.has(session.cwd);
+    const currentStatus = state.sessionStatuses.get(sessionId) || null;
     let menuItems = '';
 
     // View diff and file browser options (if session has a project path)
@@ -79,10 +88,28 @@ export function showSessionContextMenu(e, sessionId) {
 
     menuItems += `<button class="context-menu-item" data-action="trigger-summary">Trigger summary</button>`;
 
+    // Status submenu
+    menuItems += `<div class="context-menu-divider"></div>`;
+    menuItems += `<div class="context-menu-label">Set Status</div>`;
+    menuItems += `<button class="context-menu-item${currentStatus === null ? ' selected' : ''}" data-action="set-status-none">None</button>`;
+    menuItems += `<button class="context-menu-item${currentStatus === 'in_progress' ? ' selected status-in-progress' : ''}" data-action="set-status-in-progress">In Progress</button>`;
+    menuItems += `<button class="context-menu-item${currentStatus === 'waiting' ? ' selected status-waiting' : ''}" data-action="set-status-waiting">Waiting for input</button>`;
+    menuItems += `<button class="context-menu-item${currentStatus === 'done' ? ' selected status-done' : ''}" data-action="set-status-done">Done</button>`;
+    menuItems += `<div class="context-menu-divider"></div>`;
+
     if (isArchived) {
         menuItems += `<button class="context-menu-item" data-action="unarchive">Unarchive session</button>`;
     } else {
         menuItems += `<button class="context-menu-item" data-action="archive">Archive session</button>`;
+    }
+
+    // Project archive option (if session has a project path)
+    if (session.cwd) {
+        if (isProjectArchived) {
+            menuItems += `<button class="context-menu-item" data-action="unarchive-project">Unarchive project</button>`;
+        } else {
+            menuItems += `<button class="context-menu-item" data-action="archive-project">Archive project</button>`;
+        }
     }
 
     sidebarContextMenu.innerHTML = menuItems;
@@ -126,14 +153,24 @@ function handleSidebarContextMenuClick(e) {
 }
 
 function handleProjectAction(action) {
-    if (!currentMenuData || !currentMenuData.path) return;
+    if (!currentMenuData) return;
 
     if (action === 'copy-path') {
+        if (!currentMenuData.path) return;
         // Use the existing copyToClipboard utility which handles HTTP fallback
         copyToClipboard(currentMenuData.path, null);
         showFlashMessage('Project path copied', 'success');
     } else if (action === 'open-file-browser') {
+        if (!currentMenuData.path) return;
         openInFileBrowser(currentMenuData.path);
+    } else if (action === 'archive-project') {
+        if (!currentMenuData.path) return;
+        archiveProject(currentMenuData.path);
+        showFlashMessage('Project archived', 'success');
+    } else if (action === 'unarchive-project') {
+        if (!currentMenuData.path) return;
+        unarchiveProject(currentMenuData.path);
+        showFlashMessage('Project unarchived', 'success');
     }
 }
 
@@ -152,6 +189,26 @@ async function handleSessionAction(action) {
     } else if (action === 'unarchive') {
         unarchiveSession(currentMenuData.sessionId);
         showFlashMessage('Session unarchived', 'success');
+    } else if (action === 'set-status-none') {
+        setSessionStatus(currentMenuData.sessionId, null);
+        showFlashMessage('Status cleared', 'success');
+    } else if (action === 'set-status-in-progress') {
+        setSessionStatus(currentMenuData.sessionId, 'in_progress');
+        showFlashMessage('Status: In Progress', 'success');
+    } else if (action === 'set-status-waiting') {
+        setSessionStatus(currentMenuData.sessionId, 'waiting');
+        showFlashMessage('Status: Waiting for input', 'success');
+    } else if (action === 'set-status-done') {
+        setSessionStatus(currentMenuData.sessionId, 'done');
+        showFlashMessage('Status: Done', 'success');
+    } else if (action === 'archive-project') {
+        if (!currentMenuData.session.cwd) return;
+        archiveProject(currentMenuData.session.cwd);
+        showFlashMessage('Project archived', 'success');
+    } else if (action === 'unarchive-project') {
+        if (!currentMenuData.session.cwd) return;
+        unarchiveProject(currentMenuData.session.cwd);
+        showFlashMessage('Project unarchived', 'success');
     }
 }
 
