@@ -212,6 +212,9 @@ def _resolve_cwd(cwd_param: str | None, info) -> Path:
     """
     if cwd_param:
         target = Path(cwd_param)
+        # If target is a file, use its parent directory
+        if target.is_file():
+            target = target.parent
         # Security: ensure within home directory
         try:
             target.resolve().relative_to(Path.home())
