@@ -1024,14 +1024,20 @@ export function switchToSession(sessionId, scrollToBottom = false) {
     if (!session.loaded && !session.loading && !session.pending) {
         loadSessionMessages(sessionId).then(() => {
             if (scrollToBottom) {
+                // Double rAF ensures layout is complete after DOM changes
                 requestAnimationFrame(function() {
-                    window.scrollTo(0, document.body.scrollHeight);
+                    requestAnimationFrame(function() {
+                        window.scrollTo(0, document.body.scrollHeight);
+                    });
                 });
             }
         });
     } else if (scrollToBottom) {
+        // Double rAF ensures layout is complete after display:block transition
         requestAnimationFrame(function() {
-            window.scrollTo(0, document.body.scrollHeight);
+            requestAnimationFrame(function() {
+                window.scrollTo(0, document.body.scrollHeight);
+            });
         });
     }
 
