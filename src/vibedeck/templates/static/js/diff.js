@@ -108,8 +108,9 @@ function handleDiffContextMenuClick(e) {
  * Replaces the file tree with a list of changed files.
  *
  * @param {string|null} selectFilePath - Full path to a file to pre-select
+ * @param {string|null} preferredType - Force showing 'uncommitted' or 'vs_main' changes
  */
-export async function openDiffView(selectFilePath = null) {
+export async function openDiffView(selectFilePath = null, preferredType = null) {
     if (!state.activeSessionId) {
         showFlash('No active session', 'error');
         return;
@@ -162,8 +163,20 @@ export async function openDiffView(selectFilePath = null) {
         }
 
         const data = await response.json();
-        state.diffFiles = data.files || [];
-        state.diffType = data.diff_type;
+
+        // Determine which file list to show based on preferredType or default
+        if (preferredType === 'vs_main' && data.branch_files && data.branch_files.length > 0) {
+            state.diffFiles = data.branch_files;
+            state.diffType = 'vs_main';
+        } else if (preferredType === 'uncommitted' && data.uncommitted_files && data.uncommitted_files.length > 0) {
+            state.diffFiles = data.uncommitted_files;
+            state.diffType = 'uncommitted';
+        } else {
+            // Default behavior: use primary files list
+            state.diffFiles = data.files || [];
+            state.diffType = data.diff_type;
+        }
+
         state.diffMainBranch = data.main_branch;
         state.diffCurrentBranch = data.current_branch;
         state.diffCwd = data.cwd || null;
@@ -210,8 +223,12 @@ export async function openDiffView(selectFilePath = null) {
 
 /**
  * Close diff view and return to file tree mode.
+ * @returns {string|null} The cwd that was being used (for navigating back to the right directory)
  */
 export function closeDiffView() {
+    // Save cwd before clearing so caller can navigate to the right directory
+    const cwd = state.diffCwd;
+
     state.diffModeActive = false;
     state.diffFiles = [];
     state.diffType = null;
@@ -237,6 +254,8 @@ export function closeDiffView() {
             </div>
         `;
     }
+
+    return cwd;
 }
 
 /**
@@ -268,9 +287,9 @@ function renderDiffFileList() {
     closeBtn.title = 'Close diff view';
     closeBtn.innerHTML = '&times;';
     closeBtn.addEventListener('click', () => {
-        closeDiffView();
-        // Reload file tree
-        import('./filetree.js').then(m => m.loadFileTree(state.activeSessionId));
+        const cwd = closeDiffView();
+        // Reload file tree at the worktree/directory we were viewing
+        import('./filetree.js').then(m => m.loadFileTree(state.activeSessionId, cwd));
     });
     header.appendChild(closeBtn);
 
@@ -542,8 +561,9 @@ function renderNoGitMessage() {
     closeBtn.title = 'Close';
     closeBtn.innerHTML = '&times;';
     closeBtn.addEventListener('click', () => {
-        closeDiffView();
-        import('./filetree.js').then(m => m.loadFileTree(state.activeSessionId));
+        const cwd = closeDiffView();
+        // Reload file tree at the directory we were viewing
+        import('./filetree.js').then(m => m.loadFileTree(state.activeSessionId, cwd));
     });
     header.appendChild(closeBtn);
 
