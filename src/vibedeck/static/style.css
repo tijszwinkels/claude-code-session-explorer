@@ -1104,6 +1104,7 @@ details[open] > summary .tree-icon-folder::before {
 /* Git changes footer in file tree */
 .git-changes-footer {
     padding: 8px 12px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border-color);
     background: rgba(0,0,0,0.02);
     margin-top: auto;
