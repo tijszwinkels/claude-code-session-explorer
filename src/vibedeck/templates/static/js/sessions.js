@@ -1105,6 +1105,26 @@ export async function loadSessionMessages(sessionId) {
         // Clear unread count since we've loaded the messages
         session.unreadCount = 0;
 
+        // Process any messages that arrived via SSE while loading
+        // Deduplicate by checking if message ID already exists in DOM
+        if (session.loadingBuffer && session.loadingBuffer.length > 0) {
+            for (const bufferedHtml of session.loadingBuffer) {
+                const temp = document.createElement('div');
+                temp.innerHTML = bufferedHtml;
+                const msg = temp.firstElementChild;
+                if (msg && msg.id) {
+                    // Only append if this message ID doesn't already exist
+                    if (!session.container.querySelector('#' + CSS.escape(msg.id))) {
+                        session.container.appendChild(msg);
+                        processNewElement(msg);
+                        extractArtifactsFromElement(sessionId, msg);
+                        session.messageCount++;
+                    }
+                }
+            }
+            session.loadingBuffer = null;
+        }
+
     } catch (error) {
         console.error('Failed to load session messages:', error);
         // Show error in container
@@ -1119,6 +1139,7 @@ export async function loadSessionMessages(sessionId) {
         session.container.appendChild(errorDiv);
     } finally {
         session.loading = false;
+        session.loadingBuffer = null;  // Clear buffer in all cases
         session.container.classList.remove('loading');
     }
 }
@@ -1283,9 +1304,13 @@ export function appendMessage(sessionId, html) {
 
     const isActiveSession = sessionId === state.activeSessionId;
 
-    // If session is currently loading messages via REST, ignore SSE messages
-    // to avoid duplicates (the REST call will return all messages)
+    // If session is currently loading messages via REST, buffer SSE messages
+    // They'll be processed after load completes, with deduplication
     if (session.loading) {
+        if (!session.loadingBuffer) {
+            session.loadingBuffer = [];
+        }
+        session.loadingBuffer.push(html);
         return;
     }
 
