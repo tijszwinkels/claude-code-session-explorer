@@ -134,6 +134,37 @@ async def broadcast_session_status(session_id: str, get_session) -> None:
     )
 
 
+async def broadcast_session_token_usage_updated(
+    session_id: str, get_session, get_backend
+) -> None:
+    """Broadcast that a session's token usage has been updated.
+
+    Args:
+        session_id: The session ID.
+        get_session: Function to get session by ID.
+        get_backend: Function to get the current backend.
+    """
+    info = get_session(session_id)
+    if info is None:
+        return
+
+    backend = get_backend()
+    if backend is None:
+        return
+
+    try:
+        usage = backend.get_session_token_usage(info.path)
+        await broadcast_event(
+            "session_token_usage_updated",
+            {
+                "session_id": session_id,
+                "tokenUsage": usage.to_dict(),
+            },
+        )
+    except (OSError, IOError) as e:
+        logger.warning(f"Failed to broadcast token usage for {session_id}: {e}")
+
+
 async def broadcast_permission_denied(
     session_id: str, denials: list[dict], original_message: str
 ) -> None:

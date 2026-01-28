@@ -219,6 +219,14 @@ export function connect() {
         updateSessionWaitingState(data.session_id);
     });
 
+    state.eventSource.addEventListener('session_token_usage_updated', function(e) {
+        const data = JSON.parse(e.data);
+        const session = state.sessions.get(data.session_id);
+        if (session && data.tokenUsage) {
+            session.tokenUsage = data.tokenUsage;
+        }
+    });
+
     state.eventSource.addEventListener('permission_denied', function(e) {
         const data = JSON.parse(e.data);
         // Only show modal if this is for the active session

@@ -26,6 +26,7 @@ from .broadcasting import (
     broadcast_session_removed,
     broadcast_session_status,
     broadcast_session_summary_updated,
+    broadcast_session_token_usage_updated,
     get_clients,
     remove_client,
 )
@@ -35,6 +36,7 @@ from .sessions import (
     MAX_SESSIONS,
     SessionInfo,
     add_session,
+    get_current_backend,
     get_known_session_files,
     get_projects_dir,
     get_session,
@@ -456,6 +458,11 @@ async def _broadcast_session_status(session_id: str) -> None:
     await broadcast_session_status(session_id, get_session)
 
 
+async def _broadcast_session_token_usage_updated(session_id: str) -> None:
+    """Broadcast session token usage update."""
+    await broadcast_session_token_usage_updated(session_id, get_session, get_current_backend)
+
+
 # Process management
 
 
@@ -708,9 +715,10 @@ async def process_session_messages(session_id: str) -> None:
         if html:
             await broadcast_message(session_id, html)
 
-    # Broadcast updated waiting state after processing messages
+    # Broadcast updated waiting state and token usage after processing messages
     if new_entries:
         await _broadcast_session_status(session_id)
+        await _broadcast_session_token_usage_updated(session_id)
 
 
 async def process_session_summary_update(session_id: str) -> None:
