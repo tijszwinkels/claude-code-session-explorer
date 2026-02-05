@@ -117,6 +117,9 @@
                             <span>Follow</span>
                         </label>
                         <button class="preview-copy-btn" id="preview-copy-btn" title="Copy file path" style="display: none;">Copy Path</button>
+                        <button class="terminal-toggle-btn" id="terminal-toggle-btn" title="Toggle terminal (double-click for full screen)">
+                            <span class="terminal-icon">⌘</span>
+                        </button>
                         <button class="preview-close-btn" id="preview-close-btn" title="Close preview">&times;</button>
                     </div>
                 </div>
@@ -127,6 +130,14 @@
                     </div>
                 </div>
                 <div class="preview-status" id="preview-status"></div>
+
+                <!-- Terminal resize handle -->
+                <div class="terminal-resize-handle" id="terminal-resize-handle"></div>
+
+                <!-- Terminal panel -->
+                <div class="terminal-panel" id="terminal-panel">
+                    <div class="terminal-container" id="terminal-container"></div>
+                </div>
             </div>
         </div>
         

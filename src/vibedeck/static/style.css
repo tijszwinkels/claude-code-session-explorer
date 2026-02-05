@@ -1848,3 +1848,116 @@ body.hide-tools .message.assistant:not(:has(.assistant-text)):not(:has(.thinking
     0% { background-color: rgba(33, 150, 243, 0.2); }
     100% { background-color: transparent; }
 }
+
+/* ==========================================================================
+   Terminal Panel
+   ========================================================================== */
+
+/* Terminal toggle button */
+.terminal-toggle-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    transition: all 0.15s ease;
+    margin-right: 8px;
+}
+.terminal-toggle-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.terminal-toggle-btn.active {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+.terminal-toggle-btn .terminal-icon {
+    font-family: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+    font-weight: bold;
+}
+
+/* Terminal resize handle */
+.terminal-resize-handle {
+    height: 4px;
+    background: transparent;
+    cursor: ns-resize;
+    flex-shrink: 0;
+    display: none;
+}
+.terminal-resize-handle:hover {
+    background: var(--accent-color);
+}
+.terminal-panel.open ~ .terminal-resize-handle,
+.terminal-resize-handle:has(+ .terminal-panel.open) {
+    display: block;
+}
+
+/* Terminal panel */
+.terminal-panel {
+    display: none;
+    flex-shrink: 0;
+    height: 200px;
+    min-height: 100px;
+    background: var(--bg-code);
+    border-top: 1px solid var(--border-color);
+    overflow: hidden;
+}
+.terminal-panel.open {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Terminal container */
+.terminal-container {
+    flex: 1;
+    padding: 4px;
+    overflow: hidden;
+    min-height: 0; /* Important for flex children */
+}
+.terminal-container .xterm {
+    height: 100%;
+    width: 100%;
+}
+.terminal-container .xterm-viewport {
+    overflow-y: auto !important;
+}
+.terminal-container .xterm-screen {
+    height: 100%;
+}
+
+/* Terminal-only mode: hide file preview, terminal takes full height */
+.preview-main-area.terminal-only .preview-content {
+    display: none;
+}
+.preview-main-area.terminal-only .preview-status {
+    display: none;
+}
+.preview-main-area.terminal-only .terminal-resize-handle {
+    display: none;
+}
+.preview-main-area.terminal-only .terminal-panel {
+    flex: 1;
+    height: auto;
+    border-top: none;
+}
+
+/* Make preview-main-area a flex container for split layout */
+.preview-main-area {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+.preview-main-area .preview-header {
+    flex-shrink: 0;
+}
+.preview-main-area .preview-content {
+    flex: 1;
+    overflow: auto;
+}
+.preview-main-area .preview-status {
+    flex-shrink: 0;
+}
