@@ -17,7 +17,7 @@ import { initSidebarContextMenu } from './sidebar-context-menu.js';
 import { initPermissions } from './permissions.js';
 import { initDiffView } from './diff.js';
 import { initArtifacts } from './artifacts.js';
-import { initTerminal, updateTerminalTheme } from './terminal.js';
+import { initTerminal } from './terminal.js';
 
 // Initialize the application
 function init() {
