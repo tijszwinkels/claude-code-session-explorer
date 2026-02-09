@@ -3,12 +3,33 @@
 
 models:
   # Claude 4 series
+  claude-opus-4-6:
+    input: 5.00
+    output: 25.00
+    cache_write_5m: 6.25
+    cache_write_1h: 10.00
+    cache_read: 0.50
+
+  claude-opus-4-5:
+    input: 5.00
+    output: 25.00
+    cache_write_5m: 6.25
+    cache_write_1h: 10.00
+    cache_read: 0.50
+
   claude-opus-4-5-20251101:
     input: 5.00
     output: 25.00
     cache_write_5m: 6.25
     cache_write_1h: 10.00
     cache_read: 0.50
+
+  claude-opus-4-1-20250805:
+    input: 15.00
+    output: 75.00
+    cache_write_5m: 18.75
+    cache_write_1h: 30.00
+    cache_read: 1.50
 
   claude-opus-4-1-20250414:
     input: 15.00
