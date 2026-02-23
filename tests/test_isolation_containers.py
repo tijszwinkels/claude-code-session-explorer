@@ -95,9 +95,9 @@ class TestBuildCreateCommand:
             pytest.fail(f"No -v flag found in {cmd}")
 
     def test_create_command_sleep_infinity(self, manager):
-        """Container should run sleep infinity (warm container pattern)."""
+        """Container should run sleep infinity as two separate args."""
         cmd = manager.build_create_command("alice")
-        assert cmd[-2:] == ["claude-sandbox", "sleep infinity"] or "sleep" in " ".join(cmd)
+        assert cmd[-3:] == ["claude-sandbox", "sleep", "infinity"]
 
 
 class TestContainerName:
@@ -145,12 +145,69 @@ class TestLoadEnvFile:
         assert env_vars == {}
 
 
+class TestEnsureUserDir:
+    """Test user directory provisioning."""
+
+    def test_creates_directory_structure(self, manager, users_dir):
+        """Should create .local/share/claude/versions and .local/bin."""
+        manager._ensure_user_dir("newuser")
+
+        user_dir = users_dir / "newuser"
+        assert (user_dir / ".local" / "share" / "claude" / "versions").is_dir()
+        assert (user_dir / ".local" / "bin").is_dir()
+
+    def test_hardlinks_binary_from_shared(self, manager, users_dir):
+        """Should hardlink claude binary from .shared/ directory."""
+        # Set up .shared with a fake binary
+        shared_dir = users_dir / ".shared"
+        shared_dir.mkdir()
+        binary = shared_dir / "2.1.50"
+        binary.write_bytes(b"fake-claude-binary")
+
+        manager._ensure_user_dir("newuser")
+
+        target = users_dir / "newuser" / ".local" / "share" / "claude" / "versions" / "2.1.50"
+        assert target.exists()
+        assert target.read_bytes() == b"fake-claude-binary"
+        # Verify it's a hardlink (same inode)
+        assert target.stat().st_ino == binary.stat().st_ino
+
+    def test_skips_existing_binary(self, manager, users_dir):
+        """Should not overwrite if binary already exists."""
+        shared_dir = users_dir / ".shared"
+        shared_dir.mkdir()
+        (shared_dir / "2.1.50").write_bytes(b"new-version")
+
+        # Pre-create user with existing binary
+        target = users_dir / "newuser" / ".local" / "share" / "claude" / "versions" / "2.1.50"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"old-version")
+
+        manager._ensure_user_dir("newuser")
+
+        assert target.read_bytes() == b"old-version"
+
+    def test_works_without_shared_dir(self, manager, users_dir):
+        """Should still create dirs even if .shared/ doesn't exist."""
+        manager._ensure_user_dir("newuser")
+
+        user_dir = users_dir / "newuser"
+        assert (user_dir / ".local" / "share" / "claude" / "versions").is_dir()
+
+    def test_idempotent(self, manager, users_dir):
+        """Calling twice should not fail."""
+        manager._ensure_user_dir("newuser")
+        manager._ensure_user_dir("newuser")
+
+        assert (users_dir / "newuser" / ".local" / "bin").is_dir()
+
+
 class TestEnsureContainer:
     """Test async container lifecycle management."""
 
     @pytest.mark.asyncio
     async def test_creates_container_when_not_found(self, manager):
-        """Should create and start container when it doesn't exist."""
+        """Should provision user dir, create and start container when it doesn't exist."""
         mock_proc = AsyncMock()
         mock_proc.communicate = AsyncMock(return_value=(b"", b""))
 
@@ -184,6 +241,8 @@ class TestEnsureContainer:
             await manager.ensure_container("alice")
 
         assert call_count == 3
+        # Verify user dir was provisioned
+        assert (manager.get_user_dir("alice") / ".local" / "bin").is_dir()
 
     @pytest.mark.asyncio
     async def test_starts_stopped_container(self, manager):
@@ -233,7 +292,7 @@ class TestEnsureContainer:
 
     @pytest.mark.asyncio
     async def test_raises_on_create_failure(self, manager):
-        """Should raise RuntimeError when container creation fails."""
+        """Should raise ContainerError when container creation fails."""
         from vibedeck.backends.isolation.containers import ContainerError
 
         # inspect: not found
@@ -241,7 +300,7 @@ class TestEnsureContainer:
         inspect_proc.communicate = AsyncMock(return_value=(b"", b"No such object"))
         inspect_proc.returncode = 1
 
-        # create: fails
+        # create: fails (after _ensure_user_dir succeeds)
         create_proc = AsyncMock()
         create_proc.communicate = AsyncMock(
             return_value=(b"", b"image not found: claude-sandbox")

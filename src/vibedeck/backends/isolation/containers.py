@@ -129,8 +129,8 @@ class ContainerManager:
         # Bind-mount user directory as /root
         cmd.extend(["-v", f"{user_dir}:/root"])
 
-        # Image and entrypoint
-        cmd.extend([self._image, "sleep infinity"])
+        # Image and entrypoint (sleep infinity keeps container alive)
+        cmd.extend([self._image, "sleep", "infinity"])
 
         return cmd
 
@@ -191,11 +191,47 @@ class ContainerManager:
             self.get_container_name(user_id),
         ]
 
+    def _ensure_user_dir(self, user_id: str) -> None:
+        """Ensure user directory exists with claude binary.
+
+        Mirrors run.sh: creates directory structure and hardlinks the claude
+        binary from {users_dir}/.shared/ to avoid a ~215MB copy per user.
+        The container entrypoint.sh has a fallback (copies from /opt/claude/),
+        but hardlinking is preferred.
+
+        Args:
+            user_id: User identifier.
+        """
+        user_dir = self.get_user_dir(user_id)
+        versions_dir = user_dir / ".local" / "share" / "claude" / "versions"
+        bin_dir = user_dir / ".local" / "bin"
+
+        versions_dir.mkdir(parents=True, exist_ok=True)
+        bin_dir.mkdir(parents=True, exist_ok=True)
+
+        # Hardlink claude binary from .shared/ if available
+        shared_dir = self._users_dir / ".shared"
+        if shared_dir.is_dir():
+            for binary in shared_dir.iterdir():
+                if binary.is_file():
+                    target = versions_dir / binary.name
+                    if not target.exists():
+                        try:
+                            target.hardlink_to(binary)
+                            logger.info(
+                                f"Hardlinked claude {binary.name} for {user_id}"
+                            )
+                        except OSError as e:
+                            logger.warning(
+                                f"Hardlink failed for {user_id}, "
+                                f"entrypoint will copy from image: {e}"
+                            )
+
     async def ensure_container(self, user_id: str) -> None:
         """Ensure a user's container exists and is running.
 
         Inspects the container state and:
-        - If not found: creates and starts it.
+        - If not found: provisions user dir, creates and starts container.
         - If stopped: starts it.
         - If running: no-op.
 
@@ -217,8 +253,9 @@ class ContainerManager:
         stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:
-            # Container doesn't exist — create and start
+            # Container doesn't exist — provision user dir, create and start
             logger.info(f"Container {container_name} not found, creating")
+            self._ensure_user_dir(user_id)
             await self._create_container(user_id)
             await self._start_container(user_id)
             return
