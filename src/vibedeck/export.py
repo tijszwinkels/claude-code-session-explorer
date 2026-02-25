@@ -1053,54 +1053,65 @@ def export_markdown(
     return str(output_path)
 
 
-def _format_assistant_content_md(
-    content: list,
+
+def format_normalized_message_md(
+    msg: "NormalizedMessage",
     hide_tools: bool = False,
 ) -> list[str]:
-    """Format assistant message content blocks as markdown lines.
+    """Format a NormalizedMessage as markdown lines (no role header).
+
+    This is used by the refactored markdown exporter to format messages
+    from any backend through the normalization layer.
 
     Args:
-        content: List of content blocks from assistant message
-        hide_tools: If True, skip tool_use blocks
+        msg: A NormalizedMessage from the normalizer.
+        hide_tools: If True, skip tool_use and tool_result blocks.
 
     Returns:
-        List of markdown lines (without role header)
+        List of markdown lines (without role header).
     """
-    lines = []
+    from .backends.shared.normalizer import NormalizedMessage
 
-    for block in content:
-        if not isinstance(block, dict):
+    lines: list[str] = []
+
+    for block in msg.blocks:
+        if hide_tools and block.type in ("tool_use", "tool_result"):
             continue
 
-        block_type = block.get("type", "")
-
-        if hide_tools and block_type == "tool_use":
-            continue
-
-        if block_type == "text":
-            text = block.get("text", "")
+        if block.type == "text":
+            text = block.text or ""
             if text.strip():
                 lines.append(text)
                 lines.append("")
 
-        elif block_type == "thinking":
+        elif block.type == "thinking":
             lines.append("*Thinking:*")
             lines.append("")
-            lines.append(f"> {block.get('thinking', '')}")
+            lines.append(f"> {block.text or ''}")
             lines.append("")
 
-        elif block_type == "reasoning":
-            reasoning = block.get("reasoning", "")
-            lines.append("*Reasoning:*")
-            lines.append("")
-            for line in reasoning.split("\n"):
-                lines.append(f"> {line}")
+        elif block.type == "tool_use":
+            _format_tool_md(lines, block.tool_name or "Unknown", block.tool_input or {})
+
+        elif block.type == "tool_result":
+            result = block.content
+            if block.is_error:
+                lines.append("**Tool Error:**")
+            else:
+                lines.append("**Tool Output:**")
+            lines.append("```")
+            if isinstance(result, str):
+                if len(result) > 2000:
+                    result = result[:2000] + "\n... (truncated)"
+                lines.append(result)
+            elif result is not None:
+                lines.append(json.dumps(result, indent=2))
+            lines.append("```")
             lines.append("")
 
-        elif block_type == "tool_use":
-            tool_name = block.get("name", "Unknown")
-            tool_input = block.get("input", {})
-            _format_tool_md(lines, tool_name, tool_input)
+        elif block.type == "image":
+            lines.append("*[Image]*")
+            lines.append("")
 
     return lines
 
@@ -1112,6 +1123,8 @@ def format_message_as_markdown(
 ) -> str:
     """Format a single message entry as Markdown.
 
+    Uses the normalization layer for backend-agnostic content extraction.
+
     Args:
         entry: A single parsed session entry
         backend: The backend type
@@ -1120,132 +1133,31 @@ def format_message_as_markdown(
     Returns:
         Formatted markdown string for this message
     """
+    from .backends.shared.normalizer import normalize_message
+
+    msg = normalize_message(entry, backend)
+    if msg is None:
+        return ""
+
     lines = []
-    role = get_entry_role(entry, backend)
 
-    if backend == "claude_code":
-        message_data = entry.get("message", {})
-        content = message_data.get("content", "")
-    else:  # opencode
-        content = entry.get("parts", [])
-
-    if role == "user":
-        is_tool_result = (
-            isinstance(content, list)
-            and content
-            and isinstance(content[0], dict)
-            and content[0].get("type") == "tool_result"
-        )
+    if msg.role == "user":
+        is_tool_result = all(b.type == "tool_result" for b in msg.blocks)
 
         if is_tool_result:
             if hide_tools:
                 return ""
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_result":
-                    result = block.get("content", "")
-                    is_error = block.get("is_error", False)
-                    if is_error:
-                        lines.append("**Tool Error:**")
-                    else:
-                        lines.append("**Tool Output:**")
-                    lines.append("```")
-                    if isinstance(result, str):
-                        if len(result) > 2000:
-                            result = result[:2000] + "\n... (truncated)"
-                        lines.append(result)
-                    else:
-                        lines.append(json.dumps(result, indent=2))
-                    lines.append("```")
+            lines.extend(format_normalized_message_md(msg, hide_tools=False))
         else:
             lines.append("**User:**")
             lines.append("")
-            text = extract_text_from_content(content)
+            text = " ".join(
+                b.text for b in msg.blocks if b.type == "text" and b.text
+            ).strip()
             lines.append(text)
 
-    elif role == "assistant":
-        assistant_lines = []
-
-        if isinstance(content, list):
-            if backend == "claude_code":
-                # Use shared helper for Claude Code
-                assistant_lines = _format_assistant_content_md(content, hide_tools)
-            else:
-                # OpenCode has additional block types (tool, step-finish)
-                for block in content:
-                    if not isinstance(block, dict):
-                        continue
-
-                    block_type = block.get("type", "")
-
-                    if hide_tools and block_type in ("tool_use", "tool"):
-                        continue
-
-                    if block_type == "text":
-                        text = block.get("text", "")
-                        if text.strip():
-                            assistant_lines.append(text)
-                            assistant_lines.append("")
-
-                    elif block_type == "thinking":
-                        assistant_lines.append("*Thinking:*")
-                        assistant_lines.append("")
-                        assistant_lines.append(f"> {block.get('thinking', '')}")
-                        assistant_lines.append("")
-
-                    elif block_type == "reasoning":
-                        reasoning = block.get("reasoning", "")
-                        assistant_lines.append("*Reasoning:*")
-                        assistant_lines.append("")
-                        for line in reasoning.split("\n"):
-                            assistant_lines.append(f"> {line}")
-                        assistant_lines.append("")
-
-                    elif block_type == "tool_use":
-                        tool_name = block.get("name", "Unknown")
-                        tool_input = block.get("input", {})
-                        _format_tool_md(assistant_lines, tool_name, tool_input)
-
-                    elif block_type == "tool":
-                        # OpenCode tool part
-                        tool_field = block.get("tool", "")
-                        if isinstance(tool_field, str):
-                            tool_name = tool_field or block.get("name", "Unknown")
-                        elif isinstance(tool_field, dict):
-                            tool_name = tool_field.get("name", "Unknown")
-                        else:
-                            tool_name = block.get("name", "Unknown")
-
-                        tool_name = tool_name.capitalize() if tool_name else "Unknown"
-
-                        state = block.get("state", {})
-                        tool_input = state.get("input", {})
-                        tool_output = state.get("output", {})
-                        tool_error = state.get("error", "")
-
-                        _format_tool_md(assistant_lines, tool_name, tool_input)
-
-                        if tool_error:
-                            assistant_lines.append("**Error:**")
-                            assistant_lines.append("```")
-                            assistant_lines.append(tool_error)
-                            assistant_lines.append("```")
-                            assistant_lines.append("")
-                        elif tool_output:
-                            output_str = (
-                                tool_output
-                                if isinstance(tool_output, str)
-                                else json.dumps(tool_output, indent=2)
-                            )
-                            if len(output_str) > 2000:
-                                output_str = output_str[:2000] + "\n... (truncated)"
-                            assistant_lines.append("**Output:**")
-                            assistant_lines.append("```")
-                            assistant_lines.append(output_str)
-                            assistant_lines.append("```")
-                            assistant_lines.append("")
-
-                    elif block_type == "step-finish":
-                        pass  # Skip step-finish markers
+    elif msg.role == "assistant":
+        assistant_lines = format_normalized_message_md(msg, hide_tools=hide_tools)
 
         if assistant_lines:
             lines.append("**Assistant:**")
@@ -1263,6 +1175,9 @@ def format_session_as_markdown(
 ) -> str:
     """Convert parsed session messages to Markdown format.
 
+    Uses the normalization layer to handle all backend-specific content block
+    extraction, then formats the unified NormalizedMessage objects to markdown.
+
     Args:
         entries: List of parsed session entries
         session_path: Path to the session file (for metadata)
@@ -1272,6 +1187,8 @@ def format_session_as_markdown(
     Returns:
         Formatted markdown string
     """
+    from .backends.shared.normalizer import normalize_message
+
     lines = []
 
     # Header
@@ -1293,154 +1210,47 @@ def format_session_as_markdown(
     lines.append("---")
     lines.append("")
 
-    # Process messages
+    # Process messages via normalization
     prompt_num = 0
     for entry in entries:
-        role = get_entry_role(entry, backend)
-        timestamp = get_entry_timestamp(entry, backend)
+        msg = normalize_message(entry, backend)
+        if msg is None:
+            continue
 
-        if backend == "claude_code":
-            message_data = entry.get("message", {})
-            content = message_data.get("content", "")
-        else:  # opencode
-            content = entry.get("parts", [])
-
-        if role == "user":
+        if msg.role == "user":
             # Check if this is a tool result or actual user prompt
-            is_tool_result = (
-                isinstance(content, list)
-                and content
-                and isinstance(content[0], dict)
-                and content[0].get("type") == "tool_result"
-            )
+            is_tool_result = all(b.type == "tool_result" for b in msg.blocks)
 
             if is_tool_result:
-                # Skip tool results if hide_tools is enabled
                 if hide_tools:
                     continue
                 # Format tool results
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "tool_result":
-                        result = block.get("content", "")
-                        is_error = block.get("is_error", False)
-                        if is_error:
-                            lines.append("**Tool Error:**")
-                        else:
-                            lines.append("**Tool Output:**")
-                        lines.append("```")
-                        # Truncate very long output
-                        if isinstance(result, str):
-                            if len(result) > 2000:
-                                result = result[:2000] + "\n... (truncated)"
-                            lines.append(result)
-                        else:
-                            lines.append(json.dumps(result, indent=2))
-                        lines.append("```")
-                        lines.append("")
+                content_lines = format_normalized_message_md(msg, hide_tools=False)
+                lines.extend(content_lines)
             else:
-                # User prompt
+                # User prompt — extract text from blocks
                 prompt_num += 1
                 lines.append(f"## Prompt {prompt_num}")
                 lines.append("")
                 if hide_tools:
                     lines.append("**User:**")
                 else:
-                    lines.append(f"**User** ({timestamp}):")
+                    lines.append(f"**User** ({msg.timestamp}):")
                 lines.append("")
-                text = extract_text_from_content(content)
+                text = " ".join(
+                    b.text for b in msg.blocks if b.type == "text" and b.text
+                ).strip()
                 lines.append(text)
                 lines.append("")
 
-        elif role == "assistant":
-            # Use shared helper for Claude Code, inline for OpenCode (has extra handling)
-            assistant_lines = []
-
-            if isinstance(content, list):
-                if backend == "claude_code":
-                    assistant_lines = _format_assistant_content_md(content, hide_tools)
-                else:
-                    # OpenCode has additional block types
-                    for block in content:
-                        if not isinstance(block, dict):
-                            continue
-
-                        block_type = block.get("type", "")
-
-                        if hide_tools and block_type in ("tool_use", "tool"):
-                            continue
-
-                        if block_type == "text":
-                            text = block.get("text", "")
-                            if text.strip():
-                                assistant_lines.append(text)
-                                assistant_lines.append("")
-
-                        elif block_type == "thinking":
-                            assistant_lines.append("*Thinking:*")
-                            assistant_lines.append("")
-                            assistant_lines.append(f"> {block.get('thinking', '')}")
-                            assistant_lines.append("")
-
-                        elif block_type == "reasoning":
-                            reasoning = block.get("reasoning", "")
-                            assistant_lines.append("*Reasoning:*")
-                            assistant_lines.append("")
-                            for line in reasoning.split("\n"):
-                                assistant_lines.append(f"> {line}")
-                            assistant_lines.append("")
-
-                        elif block_type == "tool_use":
-                            tool_name = block.get("name", "Unknown")
-                            tool_input = block.get("input", {})
-                            _format_tool_md(assistant_lines, tool_name, tool_input)
-
-                        elif block_type == "tool":
-                            # OpenCode tool part
-                            tool_field = block.get("tool", "")
-                            if isinstance(tool_field, str):
-                                tool_name = tool_field or block.get("name", "Unknown")
-                            elif isinstance(tool_field, dict):
-                                tool_name = tool_field.get("name", "Unknown")
-                            else:
-                                tool_name = block.get("name", "Unknown")
-
-                            tool_name = tool_name.capitalize() if tool_name else "Unknown"
-
-                            state = block.get("state", {})
-                            tool_input = state.get("input", {})
-                            tool_output = state.get("output", {})
-                            tool_error = state.get("error", "")
-
-                            _format_tool_md(assistant_lines, tool_name, tool_input)
-
-                            if tool_error:
-                                assistant_lines.append("**Error:**")
-                                assistant_lines.append("```")
-                                assistant_lines.append(tool_error)
-                                assistant_lines.append("```")
-                                assistant_lines.append("")
-                            elif tool_output:
-                                output_str = (
-                                    tool_output
-                                    if isinstance(tool_output, str)
-                                    else json.dumps(tool_output, indent=2)
-                                )
-                                if len(output_str) > 2000:
-                                    output_str = output_str[:2000] + "\n... (truncated)"
-                                assistant_lines.append("**Output:**")
-                                assistant_lines.append("```")
-                                assistant_lines.append(output_str)
-                                assistant_lines.append("```")
-                                assistant_lines.append("")
-
-                        elif block_type == "step-finish":
-                            pass
+        elif msg.role == "assistant":
+            assistant_lines = format_normalized_message_md(msg, hide_tools=hide_tools)
 
             if assistant_lines:
                 if hide_tools:
                     lines.append("**Assistant:**")
                 else:
-                    lines.append(f"**Assistant** ({timestamp}):")
+                    lines.append(f"**Assistant** ({msg.timestamp}):")
                 lines.append("")
                 lines.extend(assistant_lines)
                 lines.append("---")

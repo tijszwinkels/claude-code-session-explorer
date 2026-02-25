@@ -178,6 +178,18 @@ class MessageRendererProtocol(Protocol):
 
 
 @runtime_checkable
+class MessageNormalizerProtocol(Protocol):
+    """Protocol for normalizing messages to structured format."""
+
+    def normalize_message(self, entry: dict):
+        """Normalize a backend-specific message entry.
+
+        Returns NormalizedMessage or None for entries that should be skipped.
+        """
+        ...
+
+
+@runtime_checkable
 class CodingToolBackend(Protocol):
     """Protocol that all coding tool backends must implement.
 
@@ -191,6 +203,11 @@ class CodingToolBackend(Protocol):
     @property
     def name(self) -> str:
         """Human-readable name of the backend (e.g., 'Claude Code')."""
+        ...
+
+    @property
+    def normalizer_key(self) -> str:
+        """Key for the normalization dispatch (e.g., 'claude_code', 'opencode')."""
         ...
 
     @property

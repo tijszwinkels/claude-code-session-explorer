@@ -114,6 +114,53 @@ Fetch all rendered messages for a session (lazy loading on tab open).
 
 ---
 
+### `GET /sessions/{session_id}/messages/json`
+
+Fetch all messages for a session as normalized, backend-agnostic JSON content blocks.
+
+```json
+{
+  "session_id": "abc123",
+  "messages": [
+    {
+      "role": "user",
+      "timestamp": "2024-12-30T10:00:00.000Z",
+      "blocks": [
+        { "type": "text", "text": "Hello, Claude!" }
+      ]
+    },
+    {
+      "role": "assistant",
+      "timestamp": "2024-12-30T10:00:01.000Z",
+      "blocks": [
+        { "type": "text", "text": "Hello! How can I help?" },
+        { "type": "tool_use", "tool_name": "Write", "tool_id": "tool_1", "tool_input": { "file_path": "/tmp/hello.py", "content": "..." } }
+      ],
+      "model": "claude-opus-4-6",
+      "stop_reason": "tool_use",
+      "usage": { "input_tokens": 100, "output_tokens": 50, "cache_creation_tokens": 0, "cache_read_tokens": 0, "cost": 0.003 }
+    }
+  ],
+  "message_count": 2,
+  "first_timestamp": "2024-12-30T10:00:00.000Z",
+  "last_timestamp": "2024-12-30T10:00:01.000Z"
+}
+```
+
+#### Content block types
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `text` | `text` | Plain text / markdown |
+| `thinking` | `text` | Model's internal reasoning |
+| `tool_use` | `tool_name`, `tool_id`, `tool_input` | Tool invocation |
+| `tool_result` | `tool_use_id`, `content`, `is_error` | Tool execution result |
+| `image` | `media_type`, `data` | Base64-encoded image |
+
+**Errors:** `404` session not found.
+
+---
+
 ### `GET /sessions/{session_id}/tree`
 
 Get file tree for a session's working directory.
@@ -775,7 +822,7 @@ Creates a PTY on the server. **Close code `4003`** if terminal is disabled.
 
 ### `GET /events`
 
-Server-Sent Events stream for all real-time updates. Streams indefinitely until client disconnects.
+Server-Sent Events stream for all real-time updates (HTML format). Streams indefinitely until client disconnects.
 
 **Events:**
 
@@ -792,6 +839,42 @@ Server-Sent Events stream for all real-time updates. Streams indefinitely until 
 | `session_summary_updated` | Summary regenerated | `{ "session_id": "...", "summary_title": "...", "summary_short": "...", "summary_executive": "...", "summary_branch": "..." }` |
 | `permission_denied` | Permission prompt needed | `{ "session_id": "...", "denials": [...], "original_message": "..." }` |
 | `ping` | Every 30s | `{}` |
+
+---
+
+### `GET /events/json`
+
+Server-Sent Events stream with structured JSON content blocks instead of rendered HTML. Designed for custom GUI clients and programmatic consumers. Streams indefinitely until client disconnects.
+
+All non-message events (`session_added`, `session_removed`, `session_status`, `session_summary_updated`, `session_token_usage_updated`, `permission_denied`, `ping`) use the same payload as `GET /events`.
+
+**Message-specific events:**
+
+| Event | When | Data |
+|-------|------|------|
+| `sessions` | On connect | `{ "sessions": [...], "maxSessions": 20 }` |
+| `message` | New message in any session | `{ "session_id": "...", "message": { NormalizedMessage } }` |
+| `session_catchup` | Full history loaded | `{ "session_id": "...", "messages": [ { NormalizedMessage }, ... ] }` |
+
+**NormalizedMessage shape:**
+
+```json
+{
+  "role": "assistant",
+  "timestamp": "2024-12-30T10:00:01.000Z",
+  "blocks": [
+    { "type": "text", "text": "Hello!" },
+    { "type": "tool_use", "tool_name": "Write", "tool_id": "tool_1", "tool_input": { "file_path": "/tmp/hello.py" } }
+  ],
+  "model": "claude-opus-4-6",
+  "stop_reason": "end_turn",
+  "usage": { "input_tokens": 100, "output_tokens": 50, "cache_creation_tokens": 0, "cache_read_tokens": 0, "cost": 0.003 }
+}
+```
+
+See `GET /sessions/{session_id}/messages/json` for content block type reference.
+
+Normalization only runs when JSON clients are connected (lazy evaluation).
 
 ### Session object shape
 
