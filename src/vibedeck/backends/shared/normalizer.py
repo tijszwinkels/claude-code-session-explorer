@@ -38,7 +38,7 @@ class ContentBlock:
     data: str | None = None  # base64
 
     def to_dict(self) -> dict:
-        """Serialize to JSON-safe dict, omitting None fields."""
+        """Serialize to JSON-safe dict, omitting None and empty fields."""
         d = {"type": self.type}
         for field_name in [
             "text", "tool_name", "tool_id", "tool_input",
@@ -46,7 +46,7 @@ class ContentBlock:
             "media_type", "data",
         ]:
             val = getattr(self, field_name)
-            if val is not None and val is not False:
+            if val is not None and val is not False and val != "" and val != {}:
                 d[field_name] = val
         # Always include is_error for tool_result
         if self.type == "tool_result":
