@@ -149,7 +149,7 @@ export async function openDiffView(selectFilePath = null, preferredType = null) 
     }
 
     try {
-        const response = await fetch(`/api/diff/session/${state.activeSessionId}/files${cwdParam}`);
+        const response = await fetch(`api/diff/session/${state.activeSessionId}/files${cwdParam}`);
         if (!response.ok) {
             let errorMessage = 'Failed to load diff';
             try {
@@ -375,7 +375,7 @@ export async function openFileDiff(filePath) {
 
     try {
         // Build URL with optional cwd parameter
-        let url = `/api/diff/session/${state.activeSessionId}/file?path=${encodeURIComponent(filePath)}`;
+        let url = `api/diff/session/${state.activeSessionId}/file?path=${encodeURIComponent(filePath)}`;
         if (state.diffCwd) {
             url += `&cwd=${encodeURIComponent(state.diffCwd)}`;
         }

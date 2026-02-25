@@ -277,7 +277,7 @@ export async function openPreviewPane(filePath) {
     // For follow=true, SSE initial event provides content (no markdown needed for logs)
     if (!state.previewFollow) {
         try {
-            const response = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
+            const response = await fetch(`api/file?path=${encodeURIComponent(filePath)}`);
             if (!response.ok) {
                 showPreviewStatus('error', `Failed to load: ${response.statusText}`);
                 return;
@@ -395,7 +395,7 @@ export async function openPreviewPane(filePath) {
             const scrollPos = dom.previewContent ? dom.previewContent.scrollTop : 0;
 
             try {
-                const response = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
+                const response = await fetch(`api/file?path=${encodeURIComponent(filePath)}`);
                 if (!response.ok) {
                     showPreviewStatus('error', `Failed to reload: ${response.statusText}`);
                     return;
@@ -506,7 +506,7 @@ function renderImagePreview(filePath) {
 
     const img = document.createElement('img');
     // Add timestamp to bust browser cache on reload
-    img.src = `/api/file/raw?path=${encodeURIComponent(filePath)}&t=${Date.now()}`;
+    img.src = `api/file/raw?path=${encodeURIComponent(filePath)}&t=${Date.now()}`;
     img.alt = filePath.split('/').pop();
 
     // Handle load error
@@ -533,7 +533,7 @@ function renderAudioPreview(filePath) {
     const audio = document.createElement('audio');
     audio.controls = true;
     // Add timestamp to bust browser cache on reload
-    audio.src = `/api/file/raw?path=${encodeURIComponent(filePath)}&t=${Date.now()}`;
+    audio.src = `api/file/raw?path=${encodeURIComponent(filePath)}&t=${Date.now()}`;
 
     // Handle load error
     audio.onerror = function() {
@@ -837,7 +837,7 @@ function looksLikeFilePath(text) {
  */
 async function getPathType(path) {
     try {
-        const response = await fetch(`/api/path/type?path=${encodeURIComponent(path)}`);
+        const response = await fetch(`api/path/type?path=${encodeURIComponent(path)}`);
         if (!response.ok) return null;
         const data = await response.json();
         return data.type;  // "file" or "directory"
@@ -965,7 +965,7 @@ function renderHtmlPreview(filePath) {
     const iframe = document.createElement('iframe');
     iframe.className = 'html-preview-iframe';
     // Use /api/file/raw to serve the HTML file
-    iframe.src = `/api/file/raw?path=${encodeURIComponent(filePath)}`;
+    iframe.src = `api/file/raw?path=${encodeURIComponent(filePath)}`;
     // More restricted sandbox for local files - no same-origin to prevent access to VibeDeck's storage
     iframe.sandbox = 'allow-scripts';
 

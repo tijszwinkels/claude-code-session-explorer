@@ -8,7 +8,7 @@ import { createPlaceholderMessage, switchToSession, setUpdateInputBarUI, setCrea
 // Check if send is enabled
 export async function checkSendEnabled() {
     try {
-        const response = await fetch('/send-enabled');
+        const response = await fetch('send-enabled');
         const data = await response.json();
         state.sendEnabled = data.enabled;
         if (state.sendEnabled) {
@@ -25,7 +25,7 @@ export async function checkSendEnabled() {
 // Check if fork is enabled
 export async function checkForkEnabled() {
     try {
-        const response = await fetch('/fork-enabled');
+        const response = await fetch('fork-enabled');
         const data = await response.json();
         state.forkEnabled = data.enabled;
         updateForkButtonVisibility();
@@ -38,7 +38,7 @@ export async function checkForkEnabled() {
 // Check default send backend
 export async function checkDefaultSendBackend() {
     try {
-        const response = await fetch('/default-send-backend');
+        const response = await fetch('default-send-backend');
         const data = await response.json();
         state.defaultSendBackend = data.backend;
     } catch (e) {
@@ -154,7 +154,7 @@ async function startPendingSession(pendingSession, message) {
             requestBody.model_index = modelIndex;
         }
 
-        const response = await fetch('/sessions/new', {
+        const response = await fetch('sessions/new', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
@@ -215,7 +215,7 @@ async function sendMessage() {
     autoResizeTextarea();
 
     try {
-        const response = await fetch('/sessions/' + state.activeSessionId + '/send', {
+        const response = await fetch('sessions/' + state.activeSessionId + '/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: message })
@@ -247,7 +247,7 @@ async function interruptSession() {
     if (!state.activeSessionId) return;
 
     try {
-        const response = await fetch('/sessions/' + state.activeSessionId + '/interrupt', {
+        const response = await fetch('sessions/' + state.activeSessionId + '/interrupt', {
             method: 'POST'
         });
 
@@ -288,7 +288,7 @@ async function forkMessage() {
     dom.inputStatus.className = 'input-status running';
 
     try {
-        const response = await fetch('/sessions/' + state.activeSessionId + '/fork', {
+        const response = await fetch('sessions/' + state.activeSessionId + '/fork', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: message })

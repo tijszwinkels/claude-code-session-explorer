@@ -420,7 +420,7 @@ export async function archiveSession(sessionId) {
 
     // Persist to server - rollback on failure
     try {
-        const response = await fetch('/api/archived-sessions/archive', {
+        const response = await fetch('api/archived-sessions/archive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId })
@@ -457,7 +457,7 @@ export async function unarchiveSession(sessionId) {
 
     // Persist to server - rollback on failure
     try {
-        const response = await fetch('/api/archived-sessions/unarchive', {
+        const response = await fetch('api/archived-sessions/unarchive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId })
@@ -479,7 +479,7 @@ export async function unarchiveSession(sessionId) {
 // Load archived sessions from server on init
 export async function loadArchivedSessions() {
     try {
-        const response = await fetch('/api/archived-sessions');
+        const response = await fetch('api/archived-sessions');
         const data = await response.json();
         state.archivedSessionIds = new Set(data.archived || []);
 
@@ -500,7 +500,7 @@ export async function loadArchivedSessions() {
 // Load session statuses from server on init
 export async function loadSessionStatuses() {
     try {
-        const response = await fetch('/api/session-statuses');
+        const response = await fetch('api/session-statuses');
         const data = await response.json();
         state.sessionStatuses = new Map(Object.entries(data.statuses || {}));
 
@@ -543,7 +543,7 @@ export async function setSessionStatus(sessionId, status) {
 
     // Persist to server
     try {
-        const response = await fetch('/api/session-statuses/set', {
+        const response = await fetch('api/session-statuses/set', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId, status: status })
@@ -571,7 +571,7 @@ export async function setSessionStatus(sessionId, status) {
 // Load archived projects from server on init
 export async function loadArchivedProjects() {
     try {
-        const response = await fetch('/api/archived-projects');
+        const response = await fetch('api/archived-projects');
         const data = await response.json();
         state.archivedProjectPaths = new Set(data.archived_projects || []);
 
@@ -618,7 +618,7 @@ export async function archiveProject(projectPath) {
 
     // Persist to server
     try {
-        const response = await fetch('/api/archived-projects/archive', {
+        const response = await fetch('api/archived-projects/archive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ project_path: projectPath })
@@ -672,7 +672,7 @@ export async function unarchiveProject(projectPath) {
 
     // Persist to server
     try {
-        const response = await fetch('/api/archived-projects/unarchive', {
+        const response = await fetch('api/archived-projects/unarchive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ project_path: projectPath })
@@ -734,7 +734,7 @@ export async function unarchiveProjectButKeepOthersArchived(projectPath, clicked
     // Persist the session archives to server
     for (const sessionId of sessionsToArchive) {
         try {
-            await fetch('/api/archived-sessions/archive', {
+            await fetch('api/archived-sessions/archive', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session_id: sessionId })
@@ -760,7 +760,7 @@ export async function unarchiveProjectButKeepOthersArchived(projectPath, clicked
 
     // Persist project unarchive to server
     try {
-        const response = await fetch('/api/archived-projects/unarchive', {
+        const response = await fetch('api/archived-projects/unarchive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ project_path: projectPath })
@@ -1077,7 +1077,7 @@ export async function loadSessionMessages(sessionId) {
     session.container.classList.add('loading');
 
     try {
-        const response = await fetch(`/sessions/${sessionId}/messages`);
+        const response = await fetch(`sessions/${sessionId}/messages`);
         if (!response.ok) {
             throw new Error(`Failed to load messages: ${response.status}`);
         }

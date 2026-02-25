@@ -7,7 +7,7 @@ import { formatModelName } from './utils.js';
 // Load available backends
 async function loadBackends() {
     try {
-        const response = await fetch('/backends');
+        const response = await fetch('backends');
         if (response.ok) {
             const data = await response.json();
             state.availableBackends = data.backends || [];
@@ -26,7 +26,7 @@ async function loadModelsForBackend(backendName) {
     }
 
     try {
-        const response = await fetch('/backends/' + encodeURIComponent(backendName) + '/models');
+        const response = await fetch('backends/' + encodeURIComponent(backendName) + '/models');
         if (response.ok) {
             const data = await response.json();
             state.cachedModels[backendName] = data.models || [];

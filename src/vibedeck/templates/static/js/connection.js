@@ -20,7 +20,7 @@ export function connect() {
     checkForkEnabled();
     checkDefaultSendBackend();
 
-    state.eventSource = new EventSource('/events');
+    state.eventSource = new EventSource('events');
 
     state.eventSource.addEventListener('sessions', function(e) {
         const data = JSON.parse(e.data);

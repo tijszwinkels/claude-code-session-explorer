@@ -146,7 +146,7 @@ function handleContextMenuClick(e) {
 
 function downloadFile(filePath) {
     // Create a hidden anchor element to trigger download
-    const downloadUrl = `/api/file/download?path=${encodeURIComponent(filePath)}`;
+    const downloadUrl = `api/file/download?path=${encodeURIComponent(filePath)}`;
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = filePath.split('/').pop(); // Suggest filename
@@ -241,7 +241,7 @@ async function handleFileDrop(e) {
 }
 
 async function uploadFile(file, targetDir) {
-    const url = `/api/file/upload?directory=${encodeURIComponent(targetDir)}&filename=${encodeURIComponent(file.name)}`;
+    const url = `api/file/upload?directory=${encodeURIComponent(targetDir)}&filename=${encodeURIComponent(file.name)}`;
 
     const response = await fetch(url, {
         method: 'POST',
@@ -284,7 +284,7 @@ async function deleteFile(filePath) {
     }
 
     try {
-        const response = await fetch('/api/file/delete', {
+        const response = await fetch('api/file/delete', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -396,8 +396,8 @@ export async function loadFileTree(sessionId, path = null) {
 
     try {
         const url = path
-            ? `/sessions/${sessionId}/tree?path=${encodeURIComponent(path)}`
-            : `/sessions/${sessionId}/tree`;
+            ? `sessions/${sessionId}/tree?path=${encodeURIComponent(path)}`
+            : `sessions/${sessionId}/tree`;
 
         const response = await fetch(url);
         const data = await response.json();
@@ -442,7 +442,7 @@ async function fetchGitStatus(sessionId) {
     try {
         // Pass current path as cwd so we get git status for the viewed directory
         // (important for worktrees which may be in different locations)
-        let url = `/api/diff/session/${sessionId}/files`;
+        let url = `api/diff/session/${sessionId}/files`;
         if (currentPath) {
             url += `?cwd=${encodeURIComponent(currentPath)}`;
         }

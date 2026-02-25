@@ -294,7 +294,7 @@ async function triggerSummary(sessionId) {
     try {
         showFlashMessage('Triggering summary...', 'info');
 
-        const response = await fetch(`/sessions/${sessionId}/summarize`, {
+        const response = await fetch(`sessions/${sessionId}/summarize`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
