@@ -210,7 +210,7 @@ async function resolvePath(path, sessionId) {
             params.set('session_id', sessionId);
         }
 
-        const response = await fetch(`/api/path/resolve?${params}`);
+        const response = await fetch(`api/path/resolve?${params}`);
         if (!response.ok) {
             return null;
         }

@@ -25,7 +25,7 @@ let terminalEnabled = false;
 export async function initTerminal() {
     // Check if terminal feature is enabled
     try {
-        const response = await fetch('/api/terminal/enabled');
+        const response = await fetch('api/terminal/enabled');
         const data = await response.json();
         terminalEnabled = data.enabled;
     } catch (e) {
@@ -255,11 +255,12 @@ function connectWebSocket() {
         }
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let url = `${protocol}//${window.location.host}/ws/terminal`;
+    const wsUrl = new URL('ws/terminal', window.location.href);
+    wsUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     if (cwd) {
-        url += `?cwd=${encodeURIComponent(cwd)}`;
+        wsUrl.searchParams.set('cwd', cwd);
     }
+    let url = wsUrl.href;
 
     webSocket = new WebSocket(url);
 

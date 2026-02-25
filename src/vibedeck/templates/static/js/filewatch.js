@@ -25,7 +25,7 @@ export function startFileWatch(filePath, callbacks, options = {}) {
 
     currentWatchPath = filePath;
     const follow = options.follow ? 'true' : 'false';
-    const url = `/api/file/watch?path=${encodeURIComponent(filePath)}&follow=${follow}`;
+    const url = `api/file/watch?path=${encodeURIComponent(filePath)}&follow=${follow}`;
 
     fileWatchEventSource = new EventSource(url);
 

@@ -295,7 +295,7 @@ async function handleGrantNewSession() {
     try {
         // First, allow any sandbox directories
         for (const dir of directories) {
-            await fetch('/allow-directory', {
+            await fetch('allow-directory', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ directory: dir })
@@ -303,7 +303,7 @@ async function handleGrantNewSession() {
         }
 
         // Then grant permissions and/or retry
-        const response = await fetch('/sessions/grant-permission-new', {
+        const response = await fetch('sessions/grant-permission-new', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -391,7 +391,7 @@ async function handleGrant() {
     try {
         // First, allow any sandbox directories
         for (const dir of directories) {
-            await fetch('/allow-directory', {
+            await fetch('allow-directory', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ directory: dir })
@@ -400,7 +400,7 @@ async function handleGrant() {
 
         // Then grant permissions and retry
         if (permissions.length > 0) {
-            const response = await fetch(`/sessions/${encodeURIComponent(session_id)}/grant-permission`, {
+            const response = await fetch(`sessions/${encodeURIComponent(session_id)}/grant-permission`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -417,7 +417,7 @@ async function handleGrant() {
             }
         } else if (directories.length > 0) {
             // Only sandbox denials - allow directory and retry via that endpoint
-            const response = await fetch('/allow-directory', {
+            const response = await fetch('allow-directory', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -467,7 +467,7 @@ async function handleReject() {
 
     // Send rejection as a message
     try {
-        await fetch(`/sessions/${encodeURIComponent(session_id)}/send`, {
+        await fetch(`sessions/${encodeURIComponent(session_id)}/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: rejectionMessage })
