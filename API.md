@@ -47,6 +47,7 @@ Serves JavaScript modules from `templates/static/js/`.
 
 Health check.
 
+**Response:**
 ```json
 { "status": "ok", "sessions": 5, "clients": 2 }
 ```
@@ -59,24 +60,33 @@ Health check.
 
 List all tracked sessions.
 
+**Response:**
 ```json
 {
   "sessions": [
     {
-      "session_id": "abc123",
+      "id": "abc123",
       "name": "Session Title",
-      "project_name": "MyProject",
-      "first_message": "User message...",
-      "started_at": 1234567890,
-      "last_updated_at": 1234567890,
-      "project_path": "/home/user/project",
+      "path": "/home/user/.claude/projects/-home-user-project/abc123.jsonl",
+      "projectName": "MyProject",
+      "projectPath": "/home/user/project",
+      "firstMessage": "User message...",
+      "startedAt": 1234567890,
+      "lastUpdatedAt": 1234567890,
+      "tokenUsage": {
+        "input_tokens": 1000,
+        "output_tokens": 500,
+        "cache_creation_tokens": 100,
+        "cache_read_tokens": 50,
+        "message_count": 10,
+        "cost": 0.05,
+        "models": ["claude-opus-4-6"]
+      },
       "backend": "claude-code",
-      "summary_title": "...",
-      "summary_short": "...",
-      "summary_executive": "...",
-      "summary_branch": "...",
-      "token_usage": { "input_tokens": 1000, "output_tokens": 500, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 50 },
-      "token_cost": 0.05
+      "summaryTitle": "Implementing auth",
+      "summaryShort": "Added login flow...",
+      "summaryExecutive": "Detailed summary...",
+      "summaryBranch": "feature-auth"
     }
   ]
 }
@@ -88,6 +98,7 @@ List all tracked sessions.
 
 Get running state and message queue size.
 
+**Response:**
 ```json
 { "session_id": "abc123", "running": true, "queued_messages": 2 }
 ```
@@ -100,6 +111,7 @@ Get running state and message queue size.
 
 Fetch all rendered messages for a session (lazy loading on tab open).
 
+**Response:**
 ```json
 {
   "session_id": "abc123",
@@ -118,6 +130,7 @@ Fetch all rendered messages for a session (lazy loading on tab open).
 
 Fetch all messages for a session as normalized, backend-agnostic JSON content blocks.
 
+**Response:**
 ```json
 {
   "session_id": "abc123",
@@ -134,27 +147,49 @@ Fetch all messages for a session as normalized, backend-agnostic JSON content bl
       "timestamp": "2024-12-30T10:00:01.000Z",
       "blocks": [
         { "type": "text", "text": "Hello! How can I help?" },
-        { "type": "tool_use", "tool_name": "Write", "tool_id": "tool_1", "tool_input": { "file_path": "/tmp/hello.py", "content": "..." } }
+        {
+          "type": "tool_use",
+          "tool_name": "Write",
+          "tool_id": "tool_1",
+          "tool_input": { "file_path": "/tmp/hello.py", "content": "print('hello')" }
+        }
       ],
       "model": "claude-opus-4-6",
       "stop_reason": "tool_use",
-      "usage": { "input_tokens": 100, "output_tokens": 50, "cache_creation_tokens": 0, "cache_read_tokens": 0, "cost": 0.003 }
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 0,
+        "cost": 0.003
+      }
+    },
+    {
+      "role": "user",
+      "timestamp": "2024-12-30T10:00:02.000Z",
+      "blocks": [
+        { "type": "tool_result", "tool_use_id": "tool_1", "content": "", "is_error": false }
+      ]
     }
   ],
-  "message_count": 2,
+  "message_count": 3,
   "first_timestamp": "2024-12-30T10:00:00.000Z",
-  "last_timestamp": "2024-12-30T10:00:01.000Z"
+  "last_timestamp": "2024-12-30T10:00:02.000Z"
 }
 ```
 
+Timestamps are in ISO 8601 format. `model`, `stop_reason`, and `usage` are only present on assistant messages.
+
 #### Content block types
+
+All blocks include a `type` field. Other fields are included only when non-null, non-false, non-empty-string, and non-empty-object — **except** `is_error` on `tool_result`, which is always present.
 
 | Type | Fields | Description |
 |------|--------|-------------|
 | `text` | `text` | Plain text / markdown |
 | `thinking` | `text` | Model's internal reasoning |
-| `tool_use` | `tool_name`, `tool_id`, `tool_input` | Tool invocation |
-| `tool_result` | `tool_use_id`, `content`, `is_error` | Tool execution result |
+| `tool_use` | `tool_name`, `tool_id`, `tool_input` | Tool invocation. `tool_input` omitted if empty |
+| `tool_result` | `tool_use_id`, `content`, `is_error` | Tool execution result. `is_error` always included |
 | `image` | `media_type`, `data` | Base64-encoded image |
 
 **Errors:** `404` session not found.
@@ -169,6 +204,9 @@ Get file tree for a session's working directory.
 |-------|------|-------------|
 | `path` | query, string, optional | Absolute path to list. Defaults to session's project path |
 
+**Example:** `GET /sessions/abc123/tree` or `GET /sessions/abc123/tree?path=/home/user/project/src`
+
+**Response:**
 ```json
 {
   "tree": {
@@ -281,7 +319,7 @@ Start a new session with an initial message.
 | Field | Type | Description |
 |-------|------|-------------|
 | `message` | string, required | Initial prompt |
-| `cwd` | string, required | Working directory (created if missing) |
+| `cwd` | string, optional | Working directory (created if missing) |
 | `backend` | string, optional | Backend name (default: server's default backend) |
 | `model_index` | int, optional | Index into backend's model list |
 
@@ -386,6 +424,9 @@ Persists to `~/.config/vibedeck/allowed-dirs.json`.
 
 ### `GET /send-enabled`
 
+Check if message sending is enabled.
+
+**Response:**
 ```json
 { "enabled": true }
 ```
@@ -394,6 +435,9 @@ Persists to `~/.config/vibedeck/allowed-dirs.json`.
 
 ### `GET /fork-enabled`
 
+Check if session forking is enabled.
+
+**Response:**
 ```json
 { "enabled": true }
 ```
@@ -402,6 +446,9 @@ Persists to `~/.config/vibedeck/allowed-dirs.json`.
 
 ### `GET /default-send-backend`
 
+Get the default backend for new sessions.
+
+**Response:**
 ```json
 { "backend": "claude-code" }
 ```
@@ -412,6 +459,7 @@ Persists to `~/.config/vibedeck/allowed-dirs.json`.
 
 List available backends for creating new sessions.
 
+**Response:**
 ```json
 {
   "backends": [
@@ -427,6 +475,9 @@ List available backends for creating new sessions.
 
 List available models for a backend. Case-insensitive name matching.
 
+**Example:** `GET /backends/opencode/models`
+
+**Response:**
 ```json
 { "models": ["claude-opus-4", "claude-sonnet-4", "claude-haiku-4"] }
 ```
@@ -449,6 +500,9 @@ Fetch file contents for preview.
 |-------|------|-------------|
 | `path` | query, string, required | Absolute path to file |
 
+**Example:** `GET /api/file?path=/home/user/project/file.py`
+
+**Response:**
 ```json
 {
   "content": "file contents...",
@@ -475,6 +529,8 @@ Serve raw file bytes (images, audio).
 |-------|------|-------------|
 | `path` | query, string, required | Absolute path to file |
 
+**Example:** `GET /api/file/raw?path=/home/user/project/logo.png`
+
 **Response:** Raw bytes with appropriate MIME type and `Cache-Control: private, max-age=3600`.
 
 Supported: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.ico`, `.bmp`, `.mp3`, `.wav`, `.ogg`, `.m4a`, `.flac`, `.aac`, `.wma`, `.webm`.
@@ -491,6 +547,10 @@ Download a file with `Content-Disposition: attachment`.
 |-------|------|-------------|
 | `path` | query, string, required | Absolute path to file |
 
+**Example:** `GET /api/file/download?path=/home/user/project/report.pdf`
+
+**Response:** Raw bytes with `Content-Disposition: attachment; filename="report.pdf"`.
+
 **Errors:** `403` | `404` | `400` | `500`.
 
 ---
@@ -506,6 +566,9 @@ Upload a file.
 
 **Body:** Raw file bytes.
 
+**Example:** `POST /api/file/upload?directory=/home/user/project&filename=uploaded.txt`
+
+**Response:**
 ```json
 { "success": true, "path": "/home/user/project/uploaded.txt", "error": null }
 ```
@@ -525,6 +588,7 @@ Delete a file or empty directory.
 { "path": "/home/user/project/temp.txt", "confirm": true }
 ```
 
+**Response:**
 ```json
 { "success": true, "error": null }
 ```
@@ -541,6 +605,9 @@ Check whether a path is a file or directory.
 |-------|------|-------------|
 | `path` | query, string, required | Absolute path (supports `~`) |
 
+**Example:** `GET /api/path/type?path=~/project/src`
+
+**Response:**
 ```json
 { "type": "file" }
 ```
@@ -562,6 +629,16 @@ Resolve a path, expanding `~` and relative components.
 | `path` | query, string, required | Path to resolve |
 | `session_id` | query, string, optional | Session ID for resolving relative paths against project root |
 
+**Example:** `GET /api/path/resolve?path=~/project/src/main.py`
+
+**Response:**
+```json
+{ "resolved": "/home/user/project/src/main.py" }
+```
+
+**Example (relative path with session):** `GET /api/path/resolve?path=src/main.py&session_id=abc123`
+
+**Response:**
 ```json
 { "resolved": "/home/user/project/src/main.py" }
 ```
@@ -610,6 +687,9 @@ List changed files for a session's project.
 | `session_id` | path, string | Session ID |
 | `cwd` | query, string, optional | Working directory override (e.g. worktrees) |
 
+**Example:** `GET /api/diff/session/abc123/files` or `GET /api/diff/session/abc123/files?cwd=/home/user/worktree`
+
+**Response:**
 ```json
 {
   "files": [
@@ -645,6 +725,9 @@ Get diff content for a specific file.
 | `path` | query, string, required | Relative path within project |
 | `cwd` | query, string, optional | Working directory override |
 
+**Example:** `GET /api/diff/session/abc123/file?path=src/main.py`
+
+**Response:**
 ```json
 {
   "diff": "diff --git a/src/main.py b/src/main.py\n...",
@@ -668,6 +751,7 @@ All archive routes are under `/api`.
 
 ### `GET /api/archived-sessions`
 
+**Response:**
 ```json
 { "archived": ["session1", "session2"] }
 ```
@@ -708,6 +792,7 @@ or `{ "status": "not_archived", ... }`.
 
 ### `GET /api/archived-projects`
 
+**Response:**
 ```json
 { "archived_projects": ["/home/user/project1"] }
 ```
@@ -750,6 +835,7 @@ or `{ "status": "not_archived", ... }`.
 
 ### `GET /api/session-statuses`
 
+**Response:**
 ```json
 { "statuses": { "session1": "done", "session2": "in_progress", "session3": "waiting" } }
 ```
@@ -780,6 +866,7 @@ Valid statuses: `null` (clear), `"in_progress"`, `"waiting"`, `"done"`.
 
 ### `GET /api/terminal/enabled`
 
+**Response:**
 ```json
 { "enabled": true }
 ```
@@ -790,6 +877,7 @@ Returns `false` if `ptyprocess` is not installed or `--disable-terminal` flag is
 
 ### `GET /api/terminal/shells`
 
+**Response:**
 ```json
 { "shells": ["/bin/bash", "/bin/zsh", "/bin/sh"], "default": "/bin/bash" }
 ```
@@ -806,9 +894,11 @@ Interactive terminal via WebSocket.
 |-------|------|-------------|
 | `cwd` | query, string, optional | Working directory |
 
+**Example:** `ws://localhost:8090/ws/terminal?cwd=/home/user/project`
+
 **Protocol:**
-- **Client -> Server:** Raw terminal input (keystrokes, paste).
-- **Server -> Client:** Raw terminal output.
+- **Client -> Server:** Raw terminal input (keystrokes, paste) as text frames.
+- **Server -> Client:** Raw terminal output as text frames.
 - **Client -> Server (JSON):** Resize events:
   ```json
   { "type": "resize", "cols": 80, "rows": 24 }
@@ -830,15 +920,17 @@ Server-Sent Events stream for all real-time updates (HTML format). Streams indef
 |-------|------|------|
 | `sessions` | On connect | `{ "sessions": [...], "maxSessions": 20 }` |
 | `catchup_complete` | After initial session list | `{}` |
-| `session_added` | New session discovered | `{ "session": { session object } }` |
-| `session_removed` | Session evicted (LRU) | `{ "session_id": "..." }` |
-| `message` | New message in any session | `{ "session_id": "...", "html": "..." }` |
-| `session_catchup` | Full history loaded | `{ "session_id": "...", "html": "..." }` |
-| `session_status` | Process state changed | `{ "session_id": "...", "running": true, "queued_messages": 0 }` |
-| `session_token_usage_updated` | Token count changed | `{ "session_id": "...", "token_usage": {...}, "token_cost": 0.05 }` |
-| `session_summary_updated` | Summary regenerated | `{ "session_id": "...", "summary_title": "...", "summary_short": "...", "summary_executive": "...", "summary_branch": "..." }` |
+| `session_added` | New session discovered | Session object (see shape below) |
+| `session_removed` | Session evicted (LRU) | `{ "id": "..." }` |
+| `message` | New message in any session | `{ "type": "html", "content": "<div>...</div>", "session_id": "..." }` |
+| `session_catchup` | Full history loaded (per-message) | `{ "type": "html", "content": "<div>...</div>", "session_id": "..." }` |
+| `session_status` | Process state changed | `{ "session_id": "...", "running": true, "queued_messages": 0, "waiting_for_input": false }` |
+| `session_token_usage_updated` | Token count changed | `{ "session_id": "...", "tokenUsage": {...} }` |
+| `session_summary_updated` | Summary regenerated | `{ "session_id": "...", "summaryTitle": "...", "summaryShort": "...", "summaryExecutive": "..." }` |
 | `permission_denied` | Permission prompt needed | `{ "session_id": "...", "denials": [...], "original_message": "..." }` |
 | `ping` | Every 30s | `{}` |
+
+> **Note:** The HTML `message` and `session_catchup` events use `{ "type": "html", "content": "..." }` format. The `session_catchup` event is sent as individual `message` events per message (not batched). The `session_added` event sends the session object directly as the data (not wrapped in `{"session": ...}`).
 
 ---
 
@@ -846,7 +938,7 @@ Server-Sent Events stream for all real-time updates (HTML format). Streams indef
 
 Server-Sent Events stream with structured JSON content blocks instead of rendered HTML. Designed for custom GUI clients and programmatic consumers. Streams indefinitely until client disconnects.
 
-All non-message events (`session_added`, `session_removed`, `session_status`, `session_summary_updated`, `session_token_usage_updated`, `permission_denied`, `ping`) use the same payload as `GET /events`.
+All non-message events (`session_added`, `session_removed`, `session_status`, `session_summary_updated`, `session_token_usage_updated`, `permission_denied`, `ping`) use the same payload as `GET /events`. The `sessions` event on connect also uses the same format.
 
 **Message-specific events:**
 
@@ -868,9 +960,24 @@ All non-message events (`session_added`, `session_removed`, `session_status`, `s
   ],
   "model": "claude-opus-4-6",
   "stop_reason": "end_turn",
-  "usage": { "input_tokens": 100, "output_tokens": 50, "cache_creation_tokens": 0, "cache_read_tokens": 0, "cost": 0.003 }
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 50,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "cost": 0.003
+  }
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `role` | string | `"user"` or `"assistant"` |
+| `timestamp` | string | ISO 8601 (e.g., `2024-12-30T10:00:01.000Z`) |
+| `blocks` | ContentBlock[] | Content blocks (see type reference below) |
+| `model` | string, optional | Model ID. Omitted for user messages |
+| `stop_reason` | string, optional | `"end_turn"`, `"tool_use"`, `"max_tokens"`, or omitted |
+| `usage` | object, optional | Token usage for this message. Omitted for user messages |
 
 See `GET /sessions/{session_id}/messages/json` for content block type reference.
 
@@ -878,29 +985,63 @@ Normalization only runs when JSON clients are connected (lazy evaluation).
 
 ### Session object shape
 
+Used in `GET /sessions`, `session_added` SSE event, and the `sessions` SSE event on connect.
+
 ```json
 {
-  "session_id": "abc123",
+  "id": "abc123",
   "name": "Session Title",
-  "project_name": "MyProject",
-  "first_message": "User's first message...",
-  "started_at": 1234567890,
-  "last_updated_at": 1234567890,
-  "project_path": "/home/user/project",
-  "backend": "claude-code",
-  "summary_title": "Implementing auth",
-  "summary_short": "Added login flow...",
-  "summary_executive": "Detailed summary...",
-  "summary_branch": "feature-auth",
-  "token_usage": {
+  "path": "/home/user/.claude/projects/-home-user-project/abc123.jsonl",
+  "projectName": "MyProject",
+  "projectPath": "/home/user/project",
+  "firstMessage": "User's first message...",
+  "startedAt": 1234567890,
+  "lastUpdatedAt": 1234567890,
+  "tokenUsage": {
     "input_tokens": 1000,
     "output_tokens": 500,
-    "cache_creation_input_tokens": 100,
-    "cache_read_input_tokens": 50
+    "cache_creation_tokens": 100,
+    "cache_read_tokens": 50,
+    "message_count": 10,
+    "cost": 0.05,
+    "models": ["claude-opus-4-6"]
   },
-  "token_cost": 0.05
+  "backend": "claude-code",
+  "summaryTitle": "Implementing auth",
+  "summaryShort": "Added login flow...",
+  "summaryExecutive": "Detailed summary...",
+  "summaryBranch": "feature-auth"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Session ID |
+| `name` | string | Session display name |
+| `path` | string | Path to session JSONL file |
+| `projectName` | string | Project name (derived from path) |
+| `projectPath` | string | Absolute path to the project directory |
+| `firstMessage` | string | First user message in the session |
+| `startedAt` | number \| null | Unix timestamp of first message |
+| `lastUpdatedAt` | number \| null | Unix timestamp of last message |
+| `tokenUsage` | object | Token usage stats (see below) |
+| `backend` | string | Backend name (`"claude-code"`, `"opencode"`) |
+| `summaryTitle` | string \| null | AI-generated session title |
+| `summaryShort` | string \| null | Short summary |
+| `summaryExecutive` | string \| null | Detailed executive summary |
+| `summaryBranch` | string \| null | Git branch name |
+
+**TokenUsage object:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `input_tokens` | int | Total input tokens |
+| `output_tokens` | int | Total output tokens |
+| `cache_creation_tokens` | int | Cache creation tokens |
+| `cache_read_tokens` | int | Cache read tokens |
+| `message_count` | int | Number of messages |
+| `cost` | float | Estimated cost in USD |
+| `models` | string[] | Model IDs used in session |
 
 ---
 
